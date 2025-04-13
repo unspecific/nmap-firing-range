@@ -4,6 +4,7 @@
 
 Launch lab output
 
+```
 $ sudo launch_lab 
 
  🎩  Nmap Firing Range (NFR) Launcher v0.5 - Lee 'MadHat' Heath <lheath@unspecific.com>
@@ -29,11 +30,13 @@ fd3140f83bf9d5a961b2c86ccd245d85fd0271962da3097d0120729590a90b1d
  ✔ Container ssh_host      Started 0.3s 
  ✔ Container netcat_host   Started 0.3s 
 Your Firing Range has been launched.
+```
 
 # cleanup_lab
 
 Cleanup script output
 
+```
 $ sudo cleanup_lab 
 
  🎩  NFR Cleanup v0.4 - Lee 'MadHat' Heath <lheath@unspecific.com>
@@ -57,19 +60,24 @@ ad605dc4e89c7bbf6238734305ca50a9e0d26be5043a27c9a23eab383da7eb92
 Total reclaimed space: 4.595MB
  🧹 Cleaning up generated lab files and directories...
  ✅ Lab environment cleanup complete.
+```
 
 
 
 
-Scorecard format
+#  Scorecard format
 
+```
 session=9f01175ee5e7645df7d3d0c2e7747dd7
 service=telnet target=192.168.200.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}
 service=http target=192.168.200.46 port=80 proto=tcp flag=FLAG{7bb9aae3d2bc34d0}
 service=telnet target=192.168.200.24 port=23 proto=tcp flag=FLAG{7ca3d11760335622}
 service=ssh target=192.168.200.20 port=22 proto=tcp flag=FLAG{d6a91cde647db}
+```
 
+# check_lab script
 
+```
 $ check_lab.sh score_card 
 
  🎩  NFR-CheckLab v0.5 - Lee 'MadHat' Heath <lheath@unspecific.com>
@@ -89,4 +97,5 @@ $ check_lab.sh score_card
 ❌ Incorrect: 9
 🕵️  Missed services:
 - ❗ 192.168.200.139:21:tcp was not reported
+```
 
