@@ -9,6 +9,7 @@ USED_IPS=()
 USED_PORTS=()
 NUM_SERVICES=5
 LAB_DIR="/opt/firing-range"
+BIN_DIR="bin"
 YAML_DIR="yaml_backup"
 FTP_DIR="ftp_flag"
 WEB_DIR="web_flag"
@@ -18,21 +19,7 @@ SMB_DIR="smb_flag"
 NC_DIR="nc_flag"
 TELNET_LOGIN="telnet_login.sh"
 SESSION_ID=$(openssl rand -hex 16)
-
 NCPORT=$(shuf -i1024-9999 -n1)
-# 🚨
-echo
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
-
-declare -A services=(
-  ["http"]="tcp:80"
-  ["ssh"]="tcp:22"
-  ["ftp"]="tcp:21"
-  ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
-  ["telnet"]="tcp:23"
-  ["netcat"]="tcp:$NCPORT"
-)
-
 
 # Check dependancies
 check_dependencies() {
@@ -68,6 +55,15 @@ check_dependencies() {
     echo " ❌  'docker compose' is not available. Please install Docker Compose V2."
     missing=1
   fi
+  
+  # Ensure the script exists before continuing
+  SCRIPT_FILE="$LAB_DIR/$BIN_DIR/launch_lab.sh"
+  if [[ ! -f "$SCRIPT_FILE" ]]; then
+    echo " ❌  $SCRIPT_FILE not found! Please ensure NFR is installed properly."
+    echo " 👉  It is recommended to run setup_lab to verify dependancies, setup the environemnt."
+    missing=1
+  fi
+
 
   # exit with error if anything is missing
   if [[ $missing -eq 1 ]]; then
@@ -112,6 +108,7 @@ get_image_for_service() {
     ssh) echo "rastasheep/ubuntu-sshd:18.04" ;;
     ftp) echo "stilliard/pure-ftpd:hardened" ;;
     smb) echo "dperson/samba" ;;
+    dvwa) echo "citizenstig/dvwa" ;; 
     telnet|netcat) echo "alpine" ;;
   esac
 }
@@ -140,7 +137,16 @@ get_command_for_service() {
   esac
 }
 
-while getopts "n:hd" opt; do
+declare -A services=(
+  ["http"]="tcp:80"
+  ["ssh"]="tcp:22"
+  ["ftp"]="tcp:21"
+  ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
+  ["telnet"]="tcp:23"
+  ["netcat"]="tcp:$NCPORT"
+)
+
+while getopts "n:hdV" opt; do
   case "$opt" in
     n)
       NUM_SERVICES="$OPTARG"
@@ -162,12 +168,22 @@ while getopts "n:hd" opt; do
       echo
       exit 0
       ;;
+    V)
+      echo
+      echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+      echo 
+      exit 0
+      ;;
     *)
       echo "Invalid option. Use -h for help."
       exit 1
       ;;
   esac
 done
+
+# 🚨 Let's introduce ourselves
+echo
+echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
 # Prepare session folder
 SESSION_TIME=$(date +"%Y-%m-%d_%H-%M-%S")

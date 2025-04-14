@@ -16,7 +16,7 @@ echo
 echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
 # Ensure the script exists before continuing
-SCRIPT_FILE="$LAB_DIR/$BIN_DIR/launch_random_lab.sh"
+SCRIPT_FILE="$LAB_DIR/$BIN_DIR/launch_lab.sh"
 if [[ ! -f "$SCRIPT_FILE" ]]; then
   echo "❌ $SCRIPT_FILE not found! Please ensure the script is in place."
   exit 1

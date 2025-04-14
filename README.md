@@ -1,4 +1,12 @@
 
+# Nmap Firing Range
+I am working with a few people and tey wanted to practive using nmap.  I thougt that shouldn't be too hard.
+I decded to go with BASH and docker to do this.
+I started with AI, but as the code got more complex the AI started making a lot of mistakes.
+The initial setup was AI, and then I tweaked it and expanded on it.
+
+When you run launch_lab it creates te virtual targets with Docker.
+It does need elevated priviledges.
 
 # launch_lab
 
