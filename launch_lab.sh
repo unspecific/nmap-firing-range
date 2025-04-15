@@ -33,7 +33,7 @@ check_dependencies() {
   local missing=0
 
   # Required commands
-  for cmd in docker rand awk grep sed tee realpath openssl; do
+  for cmd in docker grep shuf tee realpath openssl; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       echo " ❌  Missing required command: $cmd"
       missing=1
