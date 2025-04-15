@@ -88,6 +88,10 @@ done
 echo " 🌐 Removing lab network ($NETWORK)"
 docker network rm $NETWORK &>/dev/null || echo " ⚠️  Network $NETWORK not found or already removed."
 
+
+echo " ✅ ScoreCard being backed."
+cp -a "$SUBMISSION_FILE" "$SESSION_DIR/score_card"
+
 echo " ✅ Lab environment cleanup complete."
 echo
 
