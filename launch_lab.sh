@@ -26,6 +26,7 @@ NC_DIR="nc_flag"
 TELNET_LOGIN="telnet_login.sh"
 SESSION_ID=$(openssl rand -hex 16)
 NCPORT=$(shuf -i1024-9999 -n1)
+SECONDS=0
 
 # Check dependancies
 check_dependencies() {
@@ -115,7 +116,7 @@ get_image_for_service() {
     ftp) echo "stilliard/pure-ftpd:hardened" ;;
     smb) echo "dperson/samba" ;;
     dvwa) echo "citizenstig/dvwa" ;; 
-    telnet|netcat) echo "alpine" ;;
+    telnet|other) echo "alpine" ;;
   esac
 }
 
@@ -130,8 +131,8 @@ get_command_for_service() {
     telnet)
       echo "sh -c 'apk add --no-cache busybox-extras && telnetd -F -l $TELNET_LOGIN'"
       ;;
-    netcat)
-      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \\\"$flag\\\" > /banner && while true; do nc -lk -p $NCPORT -e /bin/cat < /banner; done'"  # Netcat command directly
+    other)
+      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \\\"$flag\\\" > /banner && while true; do cat /banner | nc -lk -p $NCPORT -q 1; done'"  # Netcat command directly
       ;;
     ssh)
       echo "bash -c 'echo \\\"$flag\\\" > /etc/motd && /usr/sbin/sshd -D'"  # SSH command directly
@@ -149,7 +150,7 @@ declare -A services=(
   ["ftp"]="tcp:21"
   ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
   ["telnet"]="tcp:23"
-  ["netcat"]="tcp:$NCPORT"
+  ["other"]="tcp:$NCPORT"
 )
 
 while getopts "n:hdV" opt; do
@@ -207,7 +208,8 @@ echo " 🆔  SESSION_ID $SESSION_ID" | tee -a "$LOGFILE"
 echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" > $SCORE_CARD
 echo "#    Started on $HOSTNAME at $SESSION_TIME" >> $SCORE_CARD 
 echo "session=$SESSION_ID" >> $SCORE_CARD
-echo "# service=telnet target=192.168.200.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}" >> $SCORE_CARD
+echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}" >> $SCORE_CARD
+echo "# Valid services ftp ssh telnet http smb other" >> $SCORE_CARD
 echo " 📊  Score Card Created" | tee -a "$LOGFILE"
 
 check_dependencies
@@ -374,3 +376,6 @@ docker ps --format "table {{.Names}}\t{{.Ports}}" >> "$LOGFILE"
 
 echo "Your Firing Range has been launched."
 echo
+
+duration=$SECONDS
+echo " ⏱️  Lab launched in $duration seconds" | tee -a "$LOGFILE"

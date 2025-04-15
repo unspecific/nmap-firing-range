@@ -15,6 +15,7 @@ SMB_DIR="smb_flag"
 NC_DIR="nc_flag"
 FTP_DIR="ftp_flag"
 WEB_DIR="web_flag"
+SECONDS=0
 
 # -- Validate input file --
 if [[ $# -ne 1 ]]; then
@@ -85,7 +86,10 @@ done
 
 # Remove the specific network for the lab environment (do not remove all networks)
 echo " 🌐 Removing lab network ($NETWORK)"
-docker network rm $NETWORK >/dev/null || echo " ⚠️  Network $NETWORK not found or already removed."
+docker network rm $NETWORK &>/dev/null || echo " ⚠️  Network $NETWORK not found or already removed."
 
 echo " ✅ Lab environment cleanup complete."
 echo
+
+duration=$SECONDS
+echo "⏱️  Lab cleanup completed in $duration seconds"
