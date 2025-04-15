@@ -10,21 +10,11 @@ echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
 # -- Validate input file --
 if [[ $# -ne 1 ]]; then
-  echo
-  echo "This is the script to score your Nmap Firing Range session"
-  echo "The submission_file should be in the following format"
-  echo
-  echo "session=123abc"
-  echo "service=http target=192.168.200.42 port=8080 proto=tcp flag=FLAG{abc123}"
-  echo "service=ftp target=192.168.200.99 port=21 proto=tcp flag=FLAG{wrongflag}"
-  echo "service=telnet target=192.168.200.77 port=9999 proto=tcp flag=FLAG{abc999}"
-  echo
-  echo "Usage: $0 <submission_file>"
-  echo
-  exit 1
+  SUBMISSION_FILE="score_card"
+else
+  SUBMISSION_FILE="$1"
 fi
 
-SUBMISSION_FILE="$1"
 
 if [[ ! -f "$SUBMISSION_FILE" ]]; then
   echo "❌ Submission file not found: $SUBMISSION_FILE"
@@ -86,7 +76,10 @@ while read -r line; do
   ip=$(echo "$line" | grep -oP 'target=\K\S+')
   port=$(echo "$line" | grep -oP 'port=\K\S+')
   flag=$(echo "$line" | grep -oP 'flag=\K\S+')
-
+  if [[ !$service && !$flag && !$proto && !$ip && !$port ]]; then
+    echo " ❗ Empty entry"
+    continue
+  fi
   key="${service}_${ip}_${port}_${proto}"
   correct_flag="${truth_map[$key]}"
 

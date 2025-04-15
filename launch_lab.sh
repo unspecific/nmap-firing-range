@@ -1,16 +1,22 @@
 #!/bin/bash
 
+# If it's not root, sudo 
+if [[ $EUID -ne 0 ]]; then
+  echo "🔒 Root access required. Re-running with sudo..."
+  exec sudo "$0" "$@"
+fi
+
 APP="Nmap Firing Range (NFR) Launcher"
 VERSION=0.5
 MIN_PORT=2000
 MAX_PORT=65000
-SUBNET="192.168.200"
+THRD_OCT=$(shuf -i2-254 -n1)
+SUBNET="192.168.$THRD_OCT"
 USED_IPS=()
 USED_PORTS=()
 NUM_SERVICES=5
 LAB_DIR="/opt/firing-range"
 BIN_DIR="bin"
-YAML_DIR="yaml_backup"
 FTP_DIR="ftp_flag"
 WEB_DIR="web_flag"
 LOG_DIR="logs"
@@ -46,8 +52,8 @@ check_dependencies() {
   fi
 
   # Optional: Check network driver
-  if ! docker network ls | grep -q 'pentest-net'; then
-    echo " ℹ️   Docker network 'pentest-net' not found. It will be created by the script."
+  if ! docker network ls | grep -q $NETWORK; then
+    echo " ℹ️   Docker network $NETWORK not found. It will be created by the script."
   fi
 
   # Check for Docker Compose (V2 or V1 fallback)
@@ -191,28 +197,35 @@ SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
 mkdir -p "$SESSION_DIR"
 LOGFILE="$SESSION_DIR/lab.log"
 COMPOSE_FILE="docker-compose.yml"
+SCORE_CARD="score_card"
+HOSTNAME=$(hostname)
+NETWORK=range-$SESSION_ID
 
-echo " 🚀  Launching random lab at $SESSION_TIME" | tee "$LOGFILE"
-
-echo " 🆔  SESSION_ID $SESSION_ID" | tee "$LOGFILE"
+echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>" > $LOGFILE
+echo " 🚀  Launching random lab at $SESSION_TIME" | tee -a "$LOGFILE"
+echo " 🆔  SESSION_ID $SESSION_ID" | tee -a "$LOGFILE"
+echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" > $SCORE_CARD
+echo "#    Started on $HOSTNAME at $SESSION_TIME" >> $SCORE_CARD 
+echo "session=$SESSION_ID" >> $SCORE_CARD
+echo "# service=telnet target=192.168.200.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}" >> $SCORE_CARD
+echo " 📊  Score Card Created" | tee -a "$LOGFILE"
 
 check_dependencies
 
-echo " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - DockerID:"
-
+echo " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK" | tee -a "$LOGFILE"
 # Create network if needed
-docker network inspect pentest-net >/dev/null 2>&1 || \
-  docker network create --subnet=$SUBNET.0/24 pentest-net
-
-if [[ -f "$LAB_DIR/$COMPOSE_FILE" ]]; then
-  mkdir -p "$LAB_DIR/$YAML_DIR"
-  mv "$LAB_DIR/$COMPOSE_FILE" "$LAB_DIR/$YAML_DIR/${COMPOSE_FILE}_backup_$(date +%s)"
-fi
+docker network inspect $NETWORK >/dev/null 2>&1 || \
+  docker network create --subnet=$SUBNET.0/24 $NETWORK
 
 # Start docker-compose.yml
-echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$LAB_DIR/$COMPOSE_FILE"
-echo "# SESSION_ID: $SESSION_ID" >> "$LAB_DIR/$COMPOSE_FILE"
-echo "services:" >> "$LAB_DIR/$COMPOSE_FILE"
+echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$SESSION_DIR/$COMPOSE_FILE"
+echo "# SESSION_ID: $SESSION_ID" >> "$SESSION_DIR/$COMPOSE_FILE"
+echo "services:" >> "$SESSION_DIR/$COMPOSE_FILE"
+echo " ➕  Created docker-compose.yaml" >> "$LOGFILE"
+
+echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$SESSION_DIR/services.map"
+echo "# Services file for sesion $SESSION_ID" >> "$SESSION_DIR/services.map"
+echo " ➕  Created services.map" >> "$LOGFILE"
 
 # Loop through services
 declare -i lab_launch=0
@@ -222,7 +235,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   rand_ip=$(get_random_ip)
   int_port=${services[$svc]}
   flag=$(generate_flag)
-  name="${svc}_host"
+  name="${svc}_host_${SESSION_ID}"
   image=$(get_image_for_service "$svc")
   command_block=$(get_command_for_service "$svc" "$flag")
   IFS=' ' read -ra ports <<< "${services[$svc]}"
@@ -231,31 +244,39 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     port=$(cut -d':' -f2 <<< "$port_proto")
     echo " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag" >> "$LOGFILE"
     echo " ➕  Enabling Serice port #$svc_count"
+    echo "service= target= port= proto= flag=" >> $SCORE_CARD
     ((svc_count++))
   done
+  
+  # Update the services.map
+  echo "$name" >> "$SESSION_DIR/services.map"
 
   # Handle HTTP special case
   if [[ "$svc" == "http" ]]; then
-    mkdir -p "$LAB_DIR/$WEB_DIR"
-    echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > $LAB_DIR/$WEB_DIR/index.html
+    echo " ➕  Creating $WEB_DIR assets" >> "$LOGFILE"
+    mkdir -p "$SESSION_DIR/$WEB_DIR"
+    echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > $SESSION_DIR/$WEB_DIR/index.html
   fi
 
   if [[ "$svc" == "ftp" ]]; then
-    mkdir -p "$LAB_DIR/$FTP_DIR"
-    echo "$flag" > "$LAB_DIR/$FTP_DIR/flag.txt"
-    echo "README - nothing to see here" > "$LAB_DIR/$FTP_DIR/README.txt"
-    echo "Welcome to backup server" > "$LAB_DIR/$FTP_DIR/welcome.txt"
+    echo " ➕  Creating $FTP_DIR assets" >> "$LOGFILE"
+    mkdir -p "$SESSION_DIR/$FTP_DIR"
+    echo "$flag" > "$SESSION_DIR/$FTP_DIR/flag.txt"
+    echo "README - nothing to see here" > "$SESSION_DIR/$FTP_DIR/README.txt"
+    echo "Welcome to backup server" > "$SESSION_DIR/$FTP_DIR/welcome.txt"
   fi
 
   if [[ "$svc" == "smb" ]]; then
-    mkdir -p "$LAB_DIR/$SMB_DIR"
+    echo " ➕  Creating $SMB_DIR assets" >> "$LOGFILE"
+    mkdir -p "$SESSION_DIR/$SMB_DIR"
   fi
 
   if [[ "$svc" == "telnet" ]]; then
-    mkdir -p "$LAB_DIR/$TELNET_DIR"
+    echo " ➕  Creating $TELNET_DIR assets" >> "$LOGFILE"
+    mkdir -p "$SESSION_DIR/$TELNET_DIR"
 
     # Generate the login script for Telnet
-    cat > "$LAB_DIR/$TELNET_DIR/$TELNET_LOGIN" <<EOF
+    cat > "$SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN" <<EOF
 #!/bin/sh
 echo Welcome to Acme Widget Corp
 echo -n Login:
@@ -271,7 +292,7 @@ else
   exit 1
 fi
 EOF
-    chmod +x "$LAB_DIR/$TELNET_DIR/$TELNET_LOGIN"
+    chmod +x "$SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN"
   fi
 
   # Write to docker-compose.yml with proper indentation
@@ -280,7 +301,7 @@ EOF
     echo "    image: $image"
     echo "    container_name: $name"
     echo "    networks:"
-    echo "      pentest-net:"
+    echo "      $NETWORK:"
     echo "        ipv4_address: $rand_ip"
     echo "    expose:"
     for port_proto in "${ports[@]}"; do
@@ -291,7 +312,7 @@ EOF
 
     if [[ "$svc" == "ftp" ]]; then
       echo "    volumes:"
-      echo "      - $LAB_DIR/$FTP_DIR:/data/ftpuser"
+      echo "      - $SESSION_DIR/$FTP_DIR:/data/ftpuser"
       echo "    environment:"
       echo "      - PUBLICHOST=127.0.0.1"
       echo "      - FTP_USER_NAME=ftpuser"
@@ -301,11 +322,11 @@ EOF
       # echo "    command: \"/run.sh -d\""
     elif [[ "$svc" == "telnet" ]]; then
       echo "    volumes:"
-      echo "      - $LAB_DIR/$TELNET_DIR/$TELNET_LOGIN:/fake_login.sh:ro"
+      echo "      - $SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN:/fake_login.sh:ro"
     elif [[ -n "$command_block" ]]; then
       echo "    command: \"$command_block\""
     fi
-  } >> "$LAB_DIR/$COMPOSE_FILE"
+  } >> "$SESSION_DIR/$COMPOSE_FILE"
 
   # Record service-specific mapping (IP, Port, Flag)
   for port_proto in "${ports[@]}"; do
@@ -321,28 +342,31 @@ EOF
 done
 
 # Add network section to the end of docker-compose.yml
-cat >> "$LAB_DIR/$COMPOSE_FILE" <<EOF
+cat >> "$SESSION_DIR/$COMPOSE_FILE" <<EOF
 networks:
-  pentest-net:
+  ${NETWORK}:
     external: true
 EOF
+echo " ➕  Finished Creaeting $COMPOSE_FILE " >> "$LOGFILE"
+
 
 ((svc_count--))
 
 
 if [[ $DO_NOT_RUN ]]; then
-  echo " 🏁  Confiured $lab_launch targets with $svc_count open ports"
-  echo " ⛔️  Dry run is complete."
+  echo " 🏁 DO NOT RUN MODE" >> "$LOGFILE"
+  echo " 🏁  Confiured $lab_launch targets with $svc_count open ports" | tee -a "$LOGFILE"
+  echo " ⛔️  Dry run is complete." | tee -a "$LOGFILE"
   echo " 🧠  You can start the docker containers with the following command"
-  echo "   \`docker compose -f "$LAB_DIR/$COMPOSE_FILE" up -d\`"
+  echo "   \`docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d\`"
   echo
   exit;
 else 
-  echo " 🚀  Launching $lab_launch targets with $svc_count open ports. Good Luck"
+  echo " 🚀  Launching $lab_launch targets with $svc_count open ports. Good Luck"  | tee -a "$LOGFILE"
 fi
 
 # Launch the containers using docker-compose
-docker compose -f "$LAB_DIR/$COMPOSE_FILE" up -d
+docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d
 
 # Log running containers
 echo -e "\n✅ Final container map:" >> "$LOGFILE"
