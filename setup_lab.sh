@@ -2,6 +2,12 @@
 
 # setup_lab.sh - Installer for the Firing Range Pentest Lab
 
+APP="NFR-SetupLab"
+VERSION=0.5
+
+echo
+echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+
 set -euo pipefail
 
 # Ensure the script is run as root or with sudo
@@ -20,7 +26,7 @@ ROLLBACK_FILE="$LOG_DIR/installed_files.txt"
 
 ### FUNCTIONS ###
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $1" | tee -a "$LOGFILE"
 }
 
 show_help() {
@@ -95,7 +101,6 @@ install_scripts() {
   done
 
   log "Scripts installed and made executable."
-}
 }
 
 
@@ -186,6 +191,7 @@ if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
+log "$APP v$VERSION initializing..."
 log "🚀 Starting Firing Range setup..."
 
 check_dependencies
