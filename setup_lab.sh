@@ -1,148 +1,188 @@
 #!/bin/bash
 
-set -e
+# setup_lab.sh - Installer for the Firing Range Pentest Lab
 
-echo "📦 Updating system and installing dependencies..."
-sudo apt update
-sudo apt install -y \
-  ca-certificates \
-  curl \
-  gnupg \
-  lsb-release \
-  bash \
-  net-tools \
-  coreutils
+set -euo pipefail
 
-echo "🔐 Adding Docker GPG key..."
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-
-echo "📚 Adding Docker repo..."
-echo \
-  "deb [arch=$(dpkg --print-architecture) \
-  signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-echo "🐳 Installing Docker Engine and Compose Plugin..."
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || true
-
-# Fallback for systems where compose plugin is missing
-if ! command -v docker-compose &>/dev/null && ! docker compose version &>/dev/null; then
-  echo "🛠 Installing standalone Docker Compose binary..."
-  sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" \
-    -o /usr/local/bin/docker-compose
-  sudo chmod +x /usr/local/bin/docker-compose
+# Ensure the script is run as root or with sudo
+if [[ "$EUID" -ne 0 ]]; then
+  echo "🔒 Root access required. Re-running with sudo..."
+  exec sudo "$0" "$@"
 fi
 
-echo "👤 Adding current user to the 'docker' group..."
-sudo usermod -aG docker $USER
+### CONFIG ###
+INSTALL_DIR="/opt/firing-range"
+BIN_DIR="$INSTALL_DIR/bin"
+LOG_DIR="$INSTALL_DIR/logs"
+LOGFILE="$LOG_DIR/setup.log"
+SCRIPTS=("launch_lab.sh" "cleanup_lab.sh" "check_lab.sh" "setup_lab.sh")
+ROLLBACK_FILE="$LOG_DIR/installed_files.txt"
 
-echo "🌐 Creating Docker network 'pentest-net'..."
-docker network create --subnet=192.168.100.0/24 pentest-net || true
+### FUNCTIONS ###
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOGFILE"
+}
 
-echo "📄 Creating docker-compose.yml..."
-cat > docker-compose.yml <<EOF
-version: '3'
-services:
-  http:
-    image: nginx
-    container_name: http_host
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.10
-    expose: ["80"]
+show_help() {
+  echo "\nFiring Range Setup Script"
+  echo "Usage: $0 [OPTIONS]"
+  echo
+  echo "Options:"
+  echo "  --help, -h         Show this help message and exit"
+  echo "  --uninstall        Uninstall all installed components and optionally backup logs"
+  echo "  --no-prompt        Skip GitHub update prompt and use local scripts"
+  echo
+  echo "This script installs or updates the Firing Range lab to /opt/firing-range,"
+  echo "ensures all dependencies are met, installs shell scripts, creates symlinks,"
+  echo "and can pull the latest scripts from GitHub."
+  echo
+  exit 0
+}
 
-  ssh:
-    image: rastasheep/ubuntu-sshd:18.04
-    container_name: ssh_host
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.11
-    expose: ["22"]
+check_dependencies() {
+  log "Checking required dependencies..."
+  local deps=(docker gh curl)
+  for dep in "${deps[@]}"; do
+    if ! command -v "$dep" &>/dev/null; then
+      echo "❌ Missing dependency: $dep"
+      exit 1
+    fi
+  done
 
-  ftp:
-    image: stilliard/pure-ftpd:hardened
-    container_name: ftp_host
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.12
-    expose: ["21"]
-
-  smb:
-    image: dperson/samba
-    container_name: smb_host
-    command: "-s 'public;/mnt;yes;no;no;all;none'"
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.13
-    expose: ["445"]
-
-  telnet:
-    image: alpine
-    container_name: telnet_host
-    command: sh -c "apk add --no-cache busybox-extras && telnetd -F -l /bin/sh"
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.14
-    expose: ["23"]
-
-  netcat:
-    image: alpine
-    container_name: netcat_host
-    command: sh -c "apk add --no-cache netcat-openbsd && nc -lk -p 9999 -e /bin/cat"
-    networks:
-      pentest-net:
-        ipv4_address: 192.168.100.15
-    expose: ["9999"]
-
-networks:
-  pentest-net:
-    external: true
-EOF
-
-echo "⚙️ Creating launch_random_lab.sh script..."
-cat > launch_random_lab.sh <<'EOS'
-#!/bin/bash
-
-MIN_PORT=2000
-MAX_PORT=65000
-
-declare -A services=(
-  ["http"]=80
-  ["ssh"]=22
-  ["ftp"]=21
-  ["smb"]=445
-  ["telnet"]=23
-  ["netcat"]=9999
-)
-
-mkdir -p logs
-LOGFILE="logs/lab_$(date +%s).log"
-
-echo "🚀 Launching random lab..." | tee $LOGFILE
-
-for svc in "${!services[@]}"; do
-  if (( RANDOM % 2 )); then
-    port=$(( RANDOM % (MAX_PORT - MIN_PORT + 1) + MIN_PORT ))
-    echo "➡️  Starting $svc on port $port (internal: ${services[$svc]})" | tee -a $LOGFILE
-    docker compose up -d $svc
-    docker container update --publish-add $port:${services[$svc]} ${svc}_host
-  else
-    echo "❌ Skipping $svc" | tee -a $LOGFILE
+  if ! gh auth status &>/dev/null; then
+    echo "❌ GitHub CLI is installed but not authenticated. Run 'gh auth login' first."
+    exit 1
   fi
-done
 
-echo -e "\n✅ Lab up. Use this to scan:" | tee -a $LOGFILE
-docker ps --format "table {{.Names}}\t{{.Ports}}" | tee -a $LOGFILE
-EOS
+  log "All dependencies satisfied."
+}
 
-chmod +x launch_random_lab.sh
+create_directories() {
+  log "Creating directory structure..."
+  mkdir -p "$BIN_DIR" "$LOG_DIR"
+}
 
-echo -e "\n✅ All set! Run this to start your first lab:\n"
-echo "   ./launch_random_lab.sh"
-echo -e "\n🔁 Log out and back in or run: \`newgrp docker\` to use Docker as your user."
+install_scripts() {
+  log "Installing scripts to $BIN_DIR..."
+  for script in "${SCRIPTS[@]}"; do
+    if [[ -f "$script" ]]; then
+      cp "$script" "$BIN_DIR/"
+      echo "$BIN_DIR/$script" >> "$ROLLBACK_FILE"
+    else
+      log "⚠️  Skipping missing script: $script"
+    fi
+  done
+  chmod +x "$BIN_DIR"/*.sh
 
+  for script in "${SCRIPTS[@]}"; do
+    if [[ ! -x "$BIN_DIR/$script" ]]; then
+      log "❌ Script $script was not copied or is not executable."
+      exit 1
+    fi
+  done
+
+  log "Scripts installed and made executable."
+}
+
+create_symlinks() {
+  read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
+  if [[ "$answer" =~ ^[Yy]$ ]]; then
+    for path_dir in ${PATH//:/ }; do
+      if [[ -w "$path_dir" ]]; then
+        log "Using $path_dir for symlinks."
+        for script in "$BIN_DIR"/*.sh; do
+          base_name=$(basename "$script" .sh)
+          ln -sf "$script" "$path_dir/$base_name"
+          echo "$path_dir/$base_name" >> "$ROLLBACK_FILE"
+          log "🔗 Linked $base_name to $path_dir/$base_name"
+        done
+        return
+      fi
+    done
+    log "❌ No writable directory found in \$PATH. Skipping symlink creation."
+  else
+    log "User chose not to create symlinks."
+  fi
+}
+
+install_from_github() {
+  log "🔄 Downloading latest scripts from GitHub..."
+  if ! gh repo clone unspecific/nmap-firing-range temp_firing_range; then
+    log "❌ Failed to clone from GitHub. Check your internet connection or GH CLI auth."
+    exit 1
+  fi
+  for script in "${SCRIPTS[@]}"; do
+    if [[ -f "temp_firing_range/$script" ]]; then
+      cp "temp_firing_range/$script" .
+    else
+      log "⚠️  Missing expected script in repo: $script"
+    fi
+  done
+  rm -rf temp_firing_range
+  log "✅ Scripts downloaded and synced from GitHub."
+
+  if [[ -f "setup_lab.sh" ]]; then
+    exec ./setup_lab.sh "$@"
+  fi
+}
+
+uninstall() {
+  echo "🚨 Uninstalling Firing Range..."
+  read -rp "💾 Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
+  if [[ "$backup_logs" =~ ^[Yy]$ ]]; then
+    BACKUP_FILE="/tmp/firing-range-logs-$(date +%Y%m%d%H%M%S).tar.gz"
+    tar -czf "$BACKUP_FILE" -C "$LOG_DIR" . && echo "📦 Logs backed up to $BACKUP_FILE"
+  fi
+
+  if [[ -f "$ROLLBACK_FILE" ]]; then
+    while read -r line; do
+      if [[ -e "$line" ]]; then
+        log "🗑️  Removing $line"
+        rm -f "$line"
+      fi
+    done < "$ROLLBACK_FILE"
+  fi
+  log "🧹 Removing directory: $INSTALL_DIR"
+  rm -rf "$INSTALL_DIR"
+  log "✅ Uninstallation complete."
+  exit 0
+}
+
+### MAIN ###
+if [[ "${1:-}" == "--uninstall" ]]; then
+  uninstall
+elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  show_help
+fi
+
+if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
+  echo "⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
+  exit 1
+fi
+
+mkdir -p "$LOG_DIR"
+log "🚀 Starting Firing Range setup..."
+
+check_dependencies
+
+if [[ "${1:-}" == "--no-prompt" ]]; then
+  github_choice="n"
+else
+  read -rp "🌐 Do you want to download the latest version from GitHub? (y/n): " github_choice
+fi
+
+if [[ "$github_choice" =~ ^[Yy]$ ]]; then
+  install_from_github "$@"
+else
+  log "📁 Using scripts in current local directory."
+fi
+
+create_directories
+install_scripts
+create_symlinks
+
+log "✅ Firing Range setup completed successfully."
+log "📁 Scripts installed to: $BIN_DIR"
+log "📄 Symlinks (if created) are available in PATH directories."
+log "📝 Setup log saved at: $LOGFILE"
+echo "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
