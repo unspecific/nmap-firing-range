@@ -24,13 +24,15 @@ log() {
 }
 
 show_help() {
-  echo "\nFiring Range Setup Script"
+  echo "Firing Range Setup Script"
   echo "Usage: $0 [OPTIONS]"
   echo
   echo "Options:"
   echo "  --help, -h         Show this help message and exit"
   echo "  --uninstall        Uninstall all installed components and optionally backup logs"
   echo "  --no-prompt        Skip GitHub update prompt and use local scripts"
+  echo "  --skip-update      Internal flag to avoid update loop after pulling latest scripts"
+  echo "  --force            Overwrite all existing scripts without prompting"
   echo
   echo "This script installs or updates the Firing Range lab to /opt/firing-range,"
   echo "ensures all dependencies are met, installs shell scripts, creates symlinks,"
@@ -61,14 +63,28 @@ create_directories() {
 
 install_scripts() {
   log "Installing scripts to $BIN_DIR..."
+
+  # Ask once if not using --force
+  if [[ "$*" != *"--force"* ]]; then
+    read -rp "🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
+    if [[ ! "$confirm_all" =~ ^[Yy]$ ]]; then
+      log "User declined to update scripts."
+      return
+    fi
+  fi
+
   for script in "${SCRIPTS[@]}"; do
     if [[ -f "$script" ]]; then
-      cp "$script" "$BIN_DIR/"
+      if [[ "$PWD/$script" -ef "$BIN_DIR/$script" ]]; then
+        log "⚠️  '$script' already exists. Overwriting."
+      fi
+      cp -f "$script" "$BIN_DIR/"
       echo "$BIN_DIR/$script" >> "$ROLLBACK_FILE"
     else
       log "⚠️  Skipping missing script: $script"
     fi
   done
+
   chmod +x "$BIN_DIR"/*.sh
 
   for script in "${SCRIPTS[@]}"; do
@@ -80,10 +96,24 @@ install_scripts() {
 
   log "Scripts installed and made executable."
 }
+}
+
 
 create_symlinks() {
-  read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
-  if [[ "$answer" =~ ^[Yy]$ ]]; then
+  if [[ "$*" == *"--force"* ]]; then
+    log "⚙️  --force enabled: creating symlinks without prompt."
+    auto_link=true
+  else
+    read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
+    if [[ "$answer" =~ ^[Yy]$ ]]; then
+      auto_link=true
+    else
+      log "User chose not to create symlinks."
+      return
+    fi
+  fi
+
+  if [[ "$auto_link" == true ]]; then
     for path_dir in ${PATH//:/ }; do
       if [[ -w "$path_dir" ]]; then
         log "Using $path_dir for symlinks."
@@ -97,8 +127,6 @@ create_symlinks() {
       fi
     done
     log "❌ No writable directory found in \$PATH. Skipping symlink creation."
-  else
-    log "User chose not to create symlinks."
   fi
 }
 
