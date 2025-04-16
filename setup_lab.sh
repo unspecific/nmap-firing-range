@@ -41,7 +41,7 @@ show_help() {
 
 check_dependencies() {
   log "Checking required dependencies..."
-  local deps=(docker gh curl)
+  local deps=(docker git curl)
   for dep in "${deps[@]}"; do
     if ! command -v "$dep" &>/dev/null; then
       echo "❌ Missing dependency: $dep"
@@ -49,10 +49,7 @@ check_dependencies() {
     fi
   done
 
-  if ! gh auth status &>/dev/null; then
-    echo "❌ GitHub CLI is installed but not authenticated. Run 'gh auth login' first."
-    exit 1
-  fi
+  # no GitHub auth required
 
   log "All dependencies satisfied."
 }
@@ -107,8 +104,8 @@ create_symlinks() {
 
 install_from_github() {
   log "🔄 Downloading latest scripts from GitHub..."
-  if ! gh repo clone unspecific/nmap-firing-range temp_firing_range; then
-    log "❌ Failed to clone from GitHub. Check your internet connection or GH CLI auth."
+  if ! git clone --depth=1 https://github.com/unspecific/nmap-firing-range.git temp_firing_range; then
+    log "❌ Failed to clone from GitHub. Check your internet connection."
     exit 1
   fi
   for script in "${SCRIPTS[@]}"; do
