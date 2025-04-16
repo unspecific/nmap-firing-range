@@ -1,12 +1,24 @@
 
 # Nmap Firing Range
-I am working with a few people and tey wanted to practive using nmap.  I thougt that shouldn't be too hard.
-I decded to go with BASH and docker to do this.
 I started with AI, but as the code got more complex the AI started making a lot of mistakes.
 The initial setup was AI, and then I tweaked it and expanded on it.
 
-When you run launch_lab it creates te virtual targets with Docker.
-It does need elevated priviledges.
+## 🔥 Nmap Firing Range Toolkit
+
+**The Nmap Firing Range** is a self-contained, replayable lab environment built for practicing real-world network enumeration and service exploitation techniques using `nmap` and similar tools.
+
+Designed as a **live-fire training ground**, this toolkit launches randomized sets of Docker-based targets simulating real services—each one hiding flags across various protocols and configurations.
+
+---
+
+### 🎯 Key Features:
+
+- **Dynamic Lab Generation**: Every session spins up targets on randomized IPs and ports, ensuring unique scans every time.
+- **Real Services, Real Flags**: Targets include protocols like FTP, SMB, SSH, Telnet, HTTP, and more—each configured with hidden `FLAG{}` strings retrievable via fingerprinting, brute-force, or banner-grabbing techniques.
+- **Scoring Built In**: Your findings are automatically checked against the session’s flag map. Scorecards show what you got right, what was missed, and where to improve.
+- **Session Replay**: Labs are fully archived, including mapping, target configurations, and user-submitted scorecards. Easily revisit past challenges or measure progress over time.
+- **Ideal for Nmap Drills**: Hone skills using advanced nmap switches (`-sV`, `--script`, `-p-`, `--version-intensity`, etc.) to fingerprint services and extract clues.
+
 
 # launch_lab
 

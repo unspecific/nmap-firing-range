@@ -153,7 +153,7 @@ declare -A services=(
   ["other"]="tcp:$NCPORT"
 )
 
-while getopts "n:hdV" opt; do
+while getopts "n:hdVi:" opt; do
   case "$opt" in
     n)
       NUM_SERVICES="$OPTARG"
@@ -181,6 +181,17 @@ while getopts "n:hdV" opt; do
       echo 
       exit 0
       ;;
+    i)
+      REPLAY_SESSION_ID="$OPTARG"
+      ;;
+    \?)
+      echo "❌ Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+    :)
+      echo "❌ Option -$OPTARG requires an argument." >&2
+      exit 1
+      ;;
     *)
       echo "Invalid option. Use -h for help."
       exit 1
@@ -201,6 +212,23 @@ COMPOSE_FILE="docker-compose.yml"
 SCORE_CARD="score_card"
 HOSTNAME=$(hostname)
 NETWORK=range-$SESSION_ID
+
+if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
+  SESSION_DIR="/opt/firing-range/logs/lab_$REPLAY_SESSION_ID"
+  COMPOSE_FILE="$SESSION_DIR/docker-compose.yml"
+
+  echo "🔁 Replaying session $REPLAY_SESSION_ID..."
+
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    echo "❌ docker-compose.yml not found in $SESSION_DIR"
+    exit 1
+  fi
+  echo " 🚀  Launching Replay of Session $REPLAY_SESSION_ID" | tee -a "$LOGFILE"
+  docker compose -f "$COMPOSE_FILE" up -d
+  echo "✅ Session $REPLAY_SESSION_ID relaunched."
+  exit 0
+fi
+
 
 echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>" > $LOGFILE
 echo " 🚀  Launching random lab at $SESSION_TIME" | tee -a "$LOGFILE"
