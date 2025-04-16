@@ -7,9 +7,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 APP="Nmap Firing Range (NFR) Launcher"
-VERSION=0.5
-MIN_PORT=2000
-MAX_PORT=65000
+VERSION=0.7.5
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
 USED_IPS=()
@@ -86,24 +84,14 @@ generate_flag() {
   echo "FLAG{$(openssl rand -hex 8)}"
 }
 
+
 get_random_ip() {
   while :; do
-    last_octet=$(( RANDOM % 254 + 2 ))
+    last_octet=$(shuf -i2-254 -n1)
     ip="$SUBNET.$last_octet"
     if [[ ! " ${USED_IPS[*]} " =~ $ip ]]; then
       USED_IPS+=("$ip")
       echo "$ip"
-      return
-    fi
-  done
-}
-
-get_random_port() {
-  while :; do
-    port=$(( RANDOM % (MAX_PORT - MIN_PORT + 1) + MIN_PORT ))
-    if [[ ! " ${USED_PORTS[*]} " =~ $port ]]; then
-      USED_PORTS+=("$port")
-      echo "$port"
       return
     fi
   done
@@ -225,6 +213,13 @@ if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
   fi
   echo " 🚀  Launching Replay of Session $REPLAY_SESSION_ID" | tee -a "$LOGFILE"
   docker compose -f "$COMPOSE_FILE" up -d
+  if [[ -f "$SESSION_DIR/score_card" ]]; then
+    cp "$SESSION_DIR/score_card" "./score_card_$REPLAY_SESSION_ID"
+    echo "📄 Score card restored to ./score_card_$REPLAY_SESSION_ID"
+    echo "📄 run 'check_lab score_card_$REPLAY_SESSION_ID' to check your card"
+    REAL_USER="${SUDO_USER:-$USER}"
+    chown "$REAL_USER:$REAL_USER" "./score_card_$REPLAY_SESSION_ID"
+  fi
   echo "✅ Session $REPLAY_SESSION_ID relaunched."
   exit 0
 fi
@@ -370,6 +365,9 @@ EOF
   fi
 
 done
+
+REAL_USER="${SUDO_USER:-$USER}"
+chown "$REAL_USER:$REAL_USER" "$SCORE_CARD"
 
 # Add network section to the end of docker-compose.yml
 cat >> "$SESSION_DIR/$COMPOSE_FILE" <<EOF

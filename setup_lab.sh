@@ -5,8 +5,6 @@
 APP="NFR-SetupLab"
 VERSION=0.5
 
-echo
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
 set -euo pipefail
 
@@ -15,6 +13,10 @@ if [[ "$EUID" -ne 0 ]]; then
   echo "🔒 Root access required. Re-running with sudo..."
   exec sudo "$0" "$@"
 fi
+
+# Let's introduce ourselves
+echo
+echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
 ### CONFIG ###
 INSTALL_DIR="/opt/firing-range"
@@ -26,7 +28,15 @@ ROLLBACK_FILE="$LOG_DIR/installed_files.txt"
 
 ### FUNCTIONS ###
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $1" | tee -a "$LOGFILE"
+  local mode="$1"
+  shift
+  local message=$*
+  local log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
+
+  if [[ "$mode" == "console" ]]; then
+    echo "$message"
+  fi
+  echo "$log" >> "$LOGFILE"
 }
 
 show_help() {
@@ -48,33 +58,33 @@ show_help() {
 }
 
 check_dependencies() {
-  log "Checking required dependencies..."
+  log silent "Checking required dependencies..."
   local deps=(docker git curl)
   for dep in "${deps[@]}"; do
     if ! command -v "$dep" &>/dev/null; then
-      echo "❌ Missing dependency: $dep"
+      log console "❌ Missing dependency: $dep"
       exit 1
     fi
   done
 
   # no GitHub auth required
 
-  log "All dependencies satisfied."
+  log silent "All dependencies satisfied."
 }
 
 create_directories() {
-  log "Creating directory structure..."
+  log silent "Creating directory structure..."
   mkdir -p "$BIN_DIR" "$LOG_DIR"
 }
 
 install_scripts() {
-  log "Installing scripts to $BIN_DIR..."
+  log silent "Installing scripts to $BIN_DIR..."
 
   # Ask once if not using --force
   if [[ "$*" != *"--force"* ]]; then
     read -rp "🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
     if [[ ! "$confirm_all" =~ ^[Yy]$ ]]; then
-      log "User declined to update scripts."
+      log silent "User declined to update scripts."
       return
     fi
   fi
@@ -82,12 +92,12 @@ install_scripts() {
   for script in "${SCRIPTS[@]}"; do
     if [[ -f "$script" ]]; then
       if [[ "$PWD/$script" -ef "$BIN_DIR/$script" ]]; then
-        log "⚠️  '$script' already exists. Overwriting."
+        log console "⚠️  '$script' already exists. Overwriting."
       fi
       cp -f "$script" "$BIN_DIR/"
       echo "$BIN_DIR/$script" >> "$ROLLBACK_FILE"
     else
-      log "⚠️  Skipping missing script: $script"
+      log console "⚠️  Skipping missing script: $script"
     fi
   done
 
@@ -95,25 +105,25 @@ install_scripts() {
 
   for script in "${SCRIPTS[@]}"; do
     if [[ ! -x "$BIN_DIR/$script" ]]; then
-      log "❌ Script $script was not copied or is not executable."
+      log console "❌ Script $script was not copied or is not executable."
       exit 1
     fi
   done
 
-  log "Scripts installed and made executable."
+  log silent "Scripts installed and made executable."
 }
 
 
 create_symlinks() {
   if [[ "$*" == *"--force"* ]]; then
-    log "⚙️  --force enabled: creating symlinks without prompt."
+    log console "⚙️  --force enabled: creating symlinks without prompt."
     auto_link=true
   else
     read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
     if [[ "$answer" =~ ^[Yy]$ ]]; then
       auto_link=true
     else
-      log "User chose not to create symlinks."
+      log silent "User chose not to create symlinks."
       return
     fi
   fi
@@ -121,35 +131,35 @@ create_symlinks() {
   if [[ "$auto_link" == true ]]; then
     for path_dir in ${PATH//:/ }; do
       if [[ -w "$path_dir" ]]; then
-        log "Using $path_dir for symlinks."
+        log silent "Using $path_dir for symlinks."
         for script in "$BIN_DIR"/*.sh; do
           base_name=$(basename "$script" .sh)
           ln -sf "$script" "$path_dir/$base_name"
           echo "$path_dir/$base_name" >> "$ROLLBACK_FILE"
-          log "🔗 Linked $base_name to $path_dir/$base_name"
+          log colsole "🔗 Linked $base_name to $path_dir/$base_name"
         done
         return
       fi
     done
-    log "❌ No writable directory found in \$PATH. Skipping symlink creation."
+    log console "❌ No writable directory found in \$PATH. Skipping symlink creation."
   fi
 }
 
 install_from_github() {
-  log "🔄 Downloading latest scripts from GitHub..."
+  log console "🔄 Downloading latest scripts from GitHub..."
   if ! git clone --depth=1 https://github.com/unspecific/nmap-firing-range.git temp_firing_range; then
-    log "❌ Failed to clone from GitHub. Check your internet connection."
+    log console "❌ Failed to clone from GitHub. Check your internet connection."
     exit 1
   fi
   for script in "${SCRIPTS[@]}"; do
     if [[ -f "temp_firing_range/$script" ]]; then
       cp "temp_firing_range/$script" .
     else
-      log "⚠️  Missing expected script in repo: $script"
+      log console "⚠️  Missing expected script in repo: $script"
     fi
   done
   rm -rf temp_firing_range
-  log "✅ Scripts downloaded and synced from GitHub."
+  log console "✅ Scripts downloaded and synced from GitHub."
 
   if [[ -f "setup_lab.sh" ]]; then
     exec ./setup_lab.sh --skip-update "$@"
@@ -157,7 +167,7 @@ install_from_github() {
 }
 
 uninstall() {
-  echo "🚨 Uninstalling Firing Range..."
+  log console "🚨 Uninstalling Firing Range..."
   read -rp "💾 Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
   if [[ "$backup_logs" =~ ^[Yy]$ ]]; then
     BACKUP_FILE="/tmp/firing-range-logs-$(date +%Y%m%d%H%M%S).tar.gz"
@@ -167,14 +177,14 @@ uninstall() {
   if [[ -f "$ROLLBACK_FILE" ]]; then
     while read -r line; do
       if [[ -e "$line" ]]; then
-        log "🗑️  Removing $line"
+        log console "🗑️  Removing $line"
         rm -f "$line"
       fi
     done < "$ROLLBACK_FILE"
   fi
-  log "🧹 Removing directory: $INSTALL_DIR"
+  log console "🧹 Removing directory: $INSTALL_DIR"
   rm -rf "$INSTALL_DIR"
-  log "✅ Uninstallation complete."
+  log console "✅ Uninstallation complete."
   exit 0
 }
 
@@ -191,8 +201,8 @@ if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
 fi
 
 mkdir -p "$LOG_DIR"
-log "$APP v$VERSION initializing..."
-log "🚀 Starting Firing Range setup..."
+log silent "$APP v$VERSION initializing..."
+log console "🚀 Starting $APP v$VERSION..."
 
 check_dependencies
 
@@ -207,15 +217,15 @@ fi
 if [[ "$github_choice" =~ ^[Yy]$ ]]; then
   install_from_github "$@"
 else
-  log "📁 Using scripts in current local directory."
+  log console "📁 Using scripts in current local directory."
 fi
 
 create_directories
 install_scripts
 create_symlinks
 
-log "✅ Firing Range setup completed successfully."
-log "📁 Scripts installed to: $BIN_DIR"
-log "📄 Symlinks (if created) are available in PATH directories."
-log "📝 Setup log saved at: $LOGFILE"
-echo "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
+log console "✅ Firing Range setup completed successfully."
+log console "📁 Scripts installed to: $BIN_DIR"
+log console "📄 Symlinks (if created) are available in PATH directories."
+log console "📝 Setup log saved at: $LOGFILE"
+log console "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
