@@ -119,7 +119,7 @@ install_from_github() {
   log "✅ Scripts downloaded and synced from GitHub."
 
   if [[ -f "setup_lab.sh" ]]; then
-    exec ./setup_lab.sh "$@"
+    exec ./setup_lab.sh --skip-update "$@"
   fi
 }
 
@@ -162,7 +162,9 @@ log "🚀 Starting Firing Range setup..."
 
 check_dependencies
 
-if [[ "${1:-}" == "--no-prompt" ]]; then
+if [[ "$*" == *"--skip-update"* ]]; then
+  github_choice="n"
+elif [[ "${1:-}" == "--no-prompt" ]]; then
   github_choice="n"
 else
   read -rp "🌐 Do you want to download the latest version from GitHub? (y/n): " github_choice
