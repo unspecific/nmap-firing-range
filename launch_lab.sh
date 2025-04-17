@@ -475,3 +475,4 @@ echo
 
 duration=$SECONDS
 log console " ⏱️  Lab launched in $duration seconds"
+echo

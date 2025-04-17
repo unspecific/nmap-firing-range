@@ -240,3 +240,4 @@ log console "📁 Scripts installed to: $BIN_DIR"
 log console "📄 Symlinks (if created) are available in PATH directories."
 log console "📝 Setup log saved at: $LOGFILE"
 log console "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
+echo
