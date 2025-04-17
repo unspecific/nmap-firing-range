@@ -7,11 +7,10 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 APP="Nmap Firing Range (NFR) Launcher"
-VERSION=0.7.5
+VERSION=0.8
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
 USED_IPS=()
-USED_PORTS=()
 NUM_SERVICES=5
 LAB_DIR="/opt/firing-range"
 BIN_DIR="bin"
@@ -20,7 +19,7 @@ WEB_DIR="web_flag"
 LOG_DIR="logs"
 TELNET_DIR="telnet_flag"
 SMB_DIR="smb_flag"
-NC_DIR="nc_flag"
+# NC_DIR="nc_flag"
 TELNET_LOGIN="telnet_login.sh"
 SESSION_ID=$(openssl rand -hex 16)
 NCPORT=$(shuf -i1024-9999 -n1)
@@ -51,7 +50,7 @@ check_dependencies() {
   fi
 
   # Optional: Check network driver
-  if ! docker network ls | grep -q $NETWORK; then
+  if ! docker network ls | grep -q "$NETWORK"; then
     echo " ℹ️   Docker network $NETWORK not found. It will be created by the script."
   fi
 
@@ -105,6 +104,11 @@ get_image_for_service() {
     smb) echo "dperson/samba" ;;
     dvwa) echo "citizenstig/dvwa" ;; 
     telnet|other) echo "alpine" ;;
+    tftp) echo "atmoz/tftp" ;;
+    snmp) echo "linuxserver/snmp" ;;
+    smtp) echo "namshi/smtp" ;;
+    imap|pop) echo "tvial/docker-mailserver" ;;
+    vnc) echo "dorowu/ubuntu-desktop-lxde-vnc" ;;
   esac
 }
 
@@ -120,17 +124,25 @@ get_command_for_service() {
       echo "sh -c 'apk add --no-cache busybox-extras && telnetd -F -l $TELNET_LOGIN'"
       ;;
     other)
-      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \\\"$flag\\\" > /banner && while true; do cat /banner | nc -lk -p $NCPORT -q 1; done'"  # Netcat command directly
+      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \"$flag\" > /banner && while true; do cat /banner | nc -lk -p $NCPORT -q 1; done'"
       ;;
     ssh)
-      echo "bash -c 'echo \\\"$flag\\\" > /etc/motd && /usr/sbin/sshd -D'"  # SSH command directly
+      echo "bash -c 'echo \"$flag\" > /etc/motd && /usr/sbin/sshd -D'"
       ;;
-    http)
-      echo ""  # No specific command for HTTP, as Nginx will start by default
+    http|dvwa|smtp|imap|pop|vnc)
+      echo ""  # Defaults to image CMD
       ;;
-    *) echo "" ;;
+    tftp)
+      echo ""  # No special command, uses image default
+      ;;
+    snmp)
+      echo "sh -c 'echo \"$flag\" > /usr/share/snmp/snmpd.conf && /etc/init.d/snmpd start && tail -f /dev/null'"  # Adjust depending on image
+      ;;
+    *)
+      echo "" ;;
   esac
 }
+
 
 declare -A services=(
   ["http"]="tcp:80"
@@ -139,9 +151,17 @@ declare -A services=(
   ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
   ["telnet"]="tcp:23"
   ["other"]="tcp:$NCPORT"
+  ["tftp"]="udp:69"
+  ["snmp"]="udp:161"
+  ["smtp"]="tcp:25"
+  ["imap"]="tcp:143"
+  ["pop"]="tcp:110"
+  ["vnc"]="tcp:5900"
 )
 
-while getopts "n:hdVi:" opt; do
+
+
+while getopts "ln:hdVi:" opt; do
   case "$opt" in
     n)
       NUM_SERVICES="$OPTARG"
@@ -161,6 +181,16 @@ while getopts "n:hdVi:" opt; do
       echo "-d  Do not run.  This i a dry run.  No Docker containers started"
       echo "-n <num_services>  Start # of services/hosts"
       echo
+      exit 0
+      ;;
+    l)
+      echo
+      echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+      echo 
+      echo "The following services are supported on this firing range."
+      for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
+        echo "$svc"
+      done
       exit 0
       ;;
     V)
@@ -225,22 +255,24 @@ if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
 fi
 
 
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>" > $LOGFILE
+echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>" > "$LOGFILE"
 echo " 🚀  Launching random lab at $SESSION_TIME" | tee -a "$LOGFILE"
 echo " 🆔  SESSION_ID $SESSION_ID" | tee -a "$LOGFILE"
-echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" > $SCORE_CARD
-echo "#    Started on $HOSTNAME at $SESSION_TIME" >> $SCORE_CARD 
-echo "session=$SESSION_ID" >> $SCORE_CARD
-echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}" >> $SCORE_CARD
-echo "# Valid services ftp ssh telnet http smb other" >> $SCORE_CARD
+{
+  echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" 
+  echo "#    Started on $HOSTNAME at $SESSION_TIME"
+  echo "session=$SESSION_ID"
+  echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}"
+  echo "# Valid services ftp ssh telnet http smb other"
+} > "$SCORE_CARD"
 echo " 📊  Score Card Created" | tee -a "$LOGFILE"
 
 check_dependencies
 
 echo " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK" | tee -a "$LOGFILE"
 # Create network if needed
-docker network inspect $NETWORK >/dev/null 2>&1 || \
-  docker network create --subnet=$SUBNET.0/24 $NETWORK
+docker network inspect "$NETWORK" >/dev/null 2>&1 || \
+  docker network create --subnet="${SUBNET}.0/24" "$NETWORK"
 
 # Start docker-compose.yml
 echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$SESSION_DIR/$COMPOSE_FILE"
@@ -258,7 +290,6 @@ svc_count=1
 for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   ((lab_launch++))
   rand_ip=$(get_random_ip)
-  int_port=${services[$svc]}
   flag=$(generate_flag)
   name="${svc}_host_${SESSION_ID}"
   image=$(get_image_for_service "$svc")
@@ -269,32 +300,12 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     port=$(cut -d':' -f2 <<< "$port_proto")
     echo " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag" >> "$LOGFILE"
     echo " ➕  Enabling Serice port #$svc_count"
-    echo "service= target= port= proto= flag=" >> $SCORE_CARD
+    echo "service= target= port= proto= flag=" >> "$SCORE_CARD"
     ((svc_count++))
   done
   
   # Update the services.map
   echo "$name" >> "$SESSION_DIR/services.map"
-
-  # Handle HTTP special case
-  if [[ "$svc" == "http" ]]; then
-    echo " ➕  Creating $WEB_DIR assets" >> "$LOGFILE"
-    mkdir -p "$SESSION_DIR/$WEB_DIR"
-    echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > $SESSION_DIR/$WEB_DIR/index.html
-  fi
-
-  if [[ "$svc" == "ftp" ]]; then
-    echo " ➕  Creating $FTP_DIR assets" >> "$LOGFILE"
-    mkdir -p "$SESSION_DIR/$FTP_DIR"
-    echo "$flag" > "$SESSION_DIR/$FTP_DIR/flag.txt"
-    echo "README - nothing to see here" > "$SESSION_DIR/$FTP_DIR/README.txt"
-    echo "Welcome to backup server" > "$SESSION_DIR/$FTP_DIR/welcome.txt"
-  fi
-
-  if [[ "$svc" == "smb" ]]; then
-    echo " ➕  Creating $SMB_DIR assets" >> "$LOGFILE"
-    mkdir -p "$SESSION_DIR/$SMB_DIR"
-  fi
 
   if [[ "$svc" == "telnet" ]]; then
     echo " ➕  Creating $TELNET_DIR assets" >> "$LOGFILE"
@@ -336,6 +347,12 @@ EOF
     done
 
     if [[ "$svc" == "ftp" ]]; then
+      echo " ➕  Creating $FTP_DIR assets" >> "$LOGFILE"
+      mkdir -p "$SESSION_DIR/$FTP_DIR"
+      echo "$flag" > "$SESSION_DIR/$FTP_DIR/flag.txt"
+      echo "README - nothing to see here" > "$SESSION_DIR/$FTP_DIR/README.txt"
+      echo "Welcome to backup server" > "$SESSION_DIR/$FTP_DIR/welcome.txt"
+
       echo "    volumes:"
       echo "      - $SESSION_DIR/$FTP_DIR:/data/ftpuser"
       echo "    environment:"
@@ -348,7 +365,33 @@ EOF
     elif [[ "$svc" == "telnet" ]]; then
       echo "    volumes:"
       echo "      - $SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN:/fake_login.sh:ro"
-    elif [[ -n "$command_block" ]]; then
+    elif [[ "$svc" == "tftp" ]]; then
+      mkdir -p "$LAB_DIR/tftp_data"
+      echo "$flag" > "$LAB_DIR/tftp_data/flag.txt"
+      echo "    volumes:"
+      echo "      - $LAB_DIR/tftp_data:/var/tftpboot"
+    elif [[ "$svc" == "snmp" ]]; then
+      mkdir -p "$LAB_DIR/snmp_config"
+      echo "rocommunity public" > "$LAB_DIR/snmp_config/snmpd.conf"
+      echo "# FLAG: $flag" >> "$LAB_DIR/snmp_config/snmpd.conf"
+      echo "    volumes:"
+      echo "      - $LAB_DIR/snmp_config:/config"
+    elif [[ "$svc" == "vnc" ]]; then
+      mkdir -p "$LAB_DIR/vnc_flag"
+      echo "$flag" > "$LAB_DIR/vnc_flag/FLAG.txt"
+      echo "    environment:"
+      echo "      - VNC_PASSWORD=password"
+    elif [[ "$svc" == "smb" ]]; then
+      echo " ➕  Creating $SMB_DIR assets" >> "$LOGFILE"
+      mkdir -p "$SESSION_DIR/$SMB_DIR"
+    elif [[ "$svc" == "http" ]]; then
+      echo " ➕  Creating $WEB_DIR assets" >> "$LOGFILE"
+      mkdir -p "$SESSION_DIR/$WEB_DIR"
+      echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > "${SESSION_DIR}/${WEB_DIR}/index.html"
+      echo "    volumes:"
+      echo "      - $LAB_DIR/web_content:/usr/share/nginx/html:ro"
+    fi
+    if [[ -n "$command_block" ]]; then
       echo "    command: \"$command_block\""
     fi
   } >> "$SESSION_DIR/$COMPOSE_FILE"
@@ -386,7 +429,7 @@ if [[ $DO_NOT_RUN ]]; then
   echo " 🏁  Confiured $lab_launch targets with $svc_count open ports" | tee -a "$LOGFILE"
   echo " ⛔️  Dry run is complete." | tee -a "$LOGFILE"
   echo " 🧠  You can start the docker containers with the following command"
-  echo "   \`docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d\`"
+  echo "   \`docker compose -f \"${SESSION_DIR}/${COMPOSE_FILE}\" up -d\`"
   echo
   exit;
 else 
