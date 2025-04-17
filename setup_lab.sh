@@ -161,6 +161,7 @@ install_from_github() {
   done
   rm -rf temp_firing_range
   log console "✅ Scripts downloaded and synced from GitHub."
+  log console "♻️ relaunching setup_lab to mke sure it is the latest version."
 
   if [[ -f "setup_lab.sh" ]]; then
     exec ./setup_lab.sh --skip-update "$@"
