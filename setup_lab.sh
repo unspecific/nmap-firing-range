@@ -3,7 +3,7 @@
 # setup_lab.sh - Installer for the Firing Range Pentest Lab
 
 APP="NFR-SetupLab"
-VERSION=0.5
+VERSION=0.8
 
 
 set -euo pipefail
@@ -31,7 +31,8 @@ log() {
   local mode="$1"
   shift
   local message=$*
-  local log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
+  local log
+  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
 
   if [[ "$mode" == "console" ]]; then
     echo "$message"
@@ -195,6 +196,16 @@ elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   show_help
 fi
 
+if [[ -d "$INSTALL_DIR" ]]; then
+  echo " 🚧  Existing installation detected at $INSTALL_DIR."
+  echo "     We can update the existing installation. Logs/sessions will not be touched"
+  read -rp "Do you want to update the existing installation? (y/n): " response
+  if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    echo " ❌  Installation aborted."
+    exit 1
+  fi
+fi
+
 if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
   echo "⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
   exit 1
@@ -220,9 +231,9 @@ else
   log console "📁 Using scripts in current local directory."
 fi
 
-create_directories
-install_scripts
-create_symlinks
+create_directories "$@"
+install_scripts "$@"
+create_symlinks "$@"
 
 log console "✅ Firing Range setup completed successfully."
 log console "📁 Scripts installed to: $BIN_DIR"

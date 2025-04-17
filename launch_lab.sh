@@ -6,6 +6,7 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo "$0" "$@"
 fi
 
+### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
 VERSION=0.8
 THRD_OCT=$(shuf -i2-254 -n1)
@@ -24,6 +25,20 @@ TELNET_LOGIN="telnet_login.sh"
 SESSION_ID=$(openssl rand -hex 16)
 NCPORT=$(shuf -i1024-9999 -n1)
 SECONDS=0
+
+### FUNCTIONS ###
+log() {
+  local mode="$1"
+  shift
+  local message=$*
+  local log
+  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
+
+  if [[ "$mode" == "console" ]]; then
+    echo "$message"
+  fi
+  echo "$log" >> "$LOGFILE"
+}
 
 # Check dependancies
 check_dependencies() {
@@ -173,13 +188,15 @@ while getopts "ln:hdVi:" opt; do
       echo
       echo "$APP v$VERSION by MadHat Unspecific madhat@unspecific.com"
       echo "$APP is a script that will set up a number of target's with flags"
-      echo "to scan with nmap and use it's scipts to find the flags"
-      echo "The hosts with me in the ${SUBNET}.0\24 subnet" 
+      echo "    to scan with nmap and use it's scipts to find the flags"
+      # echo "The hosts with me in the ${SUBNET}.0\24 subnet" 
       echo
       echo "Usage: $0 [-d][-n number_of_services]"
       echo
       echo "-d  Do not run.  This i a dry run.  No Docker containers started"
-      echo "-n <num_services>  Start # of services/hosts"
+      echo "-n <num_services>  Start # of services/hosts. Default: 5"
+      echo "-i <SESSION_ID>   to replay the session with that <SESSION_ID>"
+      echo "-V   shows the Version of the app and exits"
       echo
       exit 0
       ;;
@@ -241,7 +258,7 @@ if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
     echo "❌ docker-compose.yml not found in $SESSION_DIR"
     exit 1
   fi
-  echo " 🚀  Launching Replay of Session $REPLAY_SESSION_ID" | tee -a "$LOGFILE"
+  log console " 🚀  Launching Replay of Session $REPLAY_SESSION_ID"
   docker compose -f "$COMPOSE_FILE" up -d
   if [[ -f "$SESSION_DIR/score_card" ]]; then
     cp "$SESSION_DIR/score_card" "./score_card_$REPLAY_SESSION_ID"
@@ -255,9 +272,9 @@ if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
 fi
 
 
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>" > "$LOGFILE"
-echo " 🚀  Launching random lab at $SESSION_TIME" | tee -a "$LOGFILE"
-echo " 🆔  SESSION_ID $SESSION_ID" | tee -a "$LOGFILE"
+log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+log console " 🚀  Launching random lab at $SESSION_TIME"
+log console " 🆔  SESSION_ID $SESSION_ID"
 {
   echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" 
   echo "#    Started on $HOSTNAME at $SESSION_TIME"
@@ -265,24 +282,28 @@ echo " 🆔  SESSION_ID $SESSION_ID" | tee -a "$LOGFILE"
   echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}"
   echo "# Valid services ftp ssh telnet http smb other"
 } > "$SCORE_CARD"
-echo " 📊  Score Card Created" | tee -a "$LOGFILE"
+log console " 📊  Score Card Created"
 
 check_dependencies
 
-echo " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK" | tee -a "$LOGFILE"
+log console " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK"
 # Create network if needed
 docker network inspect "$NETWORK" >/dev/null 2>&1 || \
   docker network create --subnet="${SUBNET}.0/24" "$NETWORK"
 
 # Start docker-compose.yml
-echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$SESSION_DIR/$COMPOSE_FILE"
-echo "# SESSION_ID: $SESSION_ID" >> "$SESSION_DIR/$COMPOSE_FILE"
-echo "services:" >> "$SESSION_DIR/$COMPOSE_FILE"
-echo " ➕  Created docker-compose.yaml" >> "$LOGFILE"
+{
+  echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
+  echo "# SESSION_ID: $SESSION_ID"
+  echo "services:"
+} > "$SESSION_DIR/$COMPOSE_FILE"
+log silent " ➕  Created docker-compose.yaml"
 
-echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)" > "$SESSION_DIR/services.map"
-echo "# Services file for sesion $SESSION_ID" >> "$SESSION_DIR/services.map"
-echo " ➕  Created services.map" >> "$LOGFILE"
+{
+echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
+echo "# Services file for sesion $SESSION_ID"
+} > "$SESSION_DIR/services.map"
+log silent " ➕  Created services.map"
 
 # Loop through services
 declare -i lab_launch=0
@@ -298,7 +319,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   for port_proto in "${ports[@]}"; do
     proto=$(cut -d':' -f1 <<< "$port_proto")
     port=$(cut -d':' -f2 <<< "$port_proto")
-    echo " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag" >> "$LOGFILE"
+    log silent " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag"
     echo " ➕  Enabling Serice port #$svc_count"
     echo "service= target= port= proto= flag=" >> "$SCORE_CARD"
     ((svc_count++))
@@ -308,7 +329,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   echo "$name" >> "$SESSION_DIR/services.map"
 
   if [[ "$svc" == "telnet" ]]; then
-    echo " ➕  Creating $TELNET_DIR assets" >> "$LOGFILE"
+    log silent " ➕  Creating $TELNET_DIR assets"
     mkdir -p "$SESSION_DIR/$TELNET_DIR"
 
     # Generate the login script for Telnet
@@ -347,7 +368,7 @@ EOF
     done
 
     if [[ "$svc" == "ftp" ]]; then
-      echo " ➕  Creating $FTP_DIR assets" >> "$LOGFILE"
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$FTP_DIR"
       echo "$flag" > "$SESSION_DIR/$FTP_DIR/flag.txt"
       echo "README - nothing to see here" > "$SESSION_DIR/$FTP_DIR/README.txt"
@@ -363,35 +384,40 @@ EOF
       echo "      - ADDED_FLAGS=-d -d"
       # echo "    command: \"/run.sh -d\""
     elif [[ "$svc" == "telnet" ]]; then
+      log silent " ➕  Creating $svc assets"
       echo "    volumes:"
       echo "      - $SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN:/fake_login.sh:ro"
     elif [[ "$svc" == "tftp" ]]; then
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/tftp_data"
       echo "$flag" > "$LAB_DIR/tftp_data/flag.txt"
       echo "    volumes:"
       echo "      - $LAB_DIR/tftp_data:/var/tftpboot"
     elif [[ "$svc" == "snmp" ]]; then
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/snmp_config"
       echo "rocommunity public" > "$LAB_DIR/snmp_config/snmpd.conf"
       echo "# FLAG: $flag" >> "$LAB_DIR/snmp_config/snmpd.conf"
       echo "    volumes:"
       echo "      - $LAB_DIR/snmp_config:/config"
     elif [[ "$svc" == "vnc" ]]; then
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/vnc_flag"
       echo "$flag" > "$LAB_DIR/vnc_flag/FLAG.txt"
       echo "    environment:"
       echo "      - VNC_PASSWORD=password"
     elif [[ "$svc" == "smb" ]]; then
-      echo " ➕  Creating $SMB_DIR assets" >> "$LOGFILE"
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$SMB_DIR"
     elif [[ "$svc" == "http" ]]; then
-      echo " ➕  Creating $WEB_DIR assets" >> "$LOGFILE"
+      log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$WEB_DIR"
       echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > "${SESSION_DIR}/${WEB_DIR}/index.html"
       echo "    volumes:"
       echo "      - $LAB_DIR/web_content:/usr/share/nginx/html:ro"
     fi
     if [[ -n "$command_block" ]]; then
+      log silent " ➕  Adding Command to docker-compose"
       echo "    command: \"$command_block\""
     fi
   } >> "$SESSION_DIR/$COMPOSE_FILE"
@@ -418,33 +444,34 @@ networks:
   ${NETWORK}:
     external: true
 EOF
-echo " ➕  Finished Creaeting $COMPOSE_FILE " >> "$LOGFILE"
+log silent " ➕  Finished Creaeting $COMPOSE_FILE "
 
 
 ((svc_count--))
 
 
 if [[ $DO_NOT_RUN ]]; then
-  echo " 🏁 DO NOT RUN MODE" >> "$LOGFILE"
-  echo " 🏁  Confiured $lab_launch targets with $svc_count open ports" | tee -a "$LOGFILE"
-  echo " ⛔️  Dry run is complete." | tee -a "$LOGFILE"
-  echo " 🧠  You can start the docker containers with the following command"
-  echo "   \`docker compose -f \"${SESSION_DIR}/${COMPOSE_FILE}\" up -d\`"
+  log silent " 🏁 DO NOT RUN MODE"
+  log console " 🏁  Confiured $lab_launch targets with $svc_count open ports"
+  log console " ⛔️  Dry run is complete."
+  log console " 🧠  You can start the docker containers with the following command"
+  log console "   \`docker compose -f \"${SESSION_DIR}/${COMPOSE_FILE}\" up -d\`"
   echo
   exit;
 else 
-  echo " 🚀  Launching $lab_launch targets with $svc_count open ports. Good Luck"  | tee -a "$LOGFILE"
+  log console " 🚀  Launching $lab_launch targets with $svc_count open ports. Good Luck"
 fi
 
 # Launch the containers using docker-compose
 docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d
 
 # Log running containers
-echo -e "\n✅ Final container map:" >> "$LOGFILE"
-docker ps --format "table {{.Names}}\t{{.Ports}}" >> "$LOGFILE"
+log silent "✅ Final container map:"
+DOCKER_PS=$(docker ps --format "table {{.Names}}\t{{.Ports}}")
+log console "$DOCKER_PS"
 
-echo "Your Firing Range has been launched."
+log console "Your Firing Range has been launched."
 echo
 
 duration=$SECONDS
-echo " ⏱️  Lab launched in $duration seconds" | tee -a "$LOGFILE"
+log console " ⏱️  Lab launched in $duration seconds"
