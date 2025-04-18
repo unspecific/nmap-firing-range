@@ -119,7 +119,7 @@ get_image_for_service() {
     smb) echo "dperson/samba" ;;
     dvwa) echo "citizenstig/dvwa" ;; 
     telnet|other) echo "alpine" ;;
-    tftp) echo "atmoz/tftp" ;;
+    tftp) echo "panubo/tftp" ;;
     snmp) echo "linuxserver/snmp" ;;
     smtp) echo "namshi/smtp" ;;
     imap|pop) echo "tvial/docker-mailserver" ;;
@@ -148,7 +148,7 @@ get_command_for_service() {
       echo ""  # Defaults to image CMD
       ;;
     tftp)
-      echo ""  # No special command, uses image default
+      echo ""
       ;;
     snmp)
       echo "sh -c 'echo \"$flag\" > /usr/share/snmp/snmpd.conf && /etc/init.d/snmpd start && tail -f /dev/null'"  # Adjust depending on image
@@ -392,7 +392,7 @@ EOF
       mkdir -p "$LAB_DIR/tftp_data"
       echo "$flag" > "$LAB_DIR/tftp_data/flag.txt"
       echo "    volumes:"
-      echo "      - $LAB_DIR/tftp_data:/var/tftpboot"
+      echo "      - $LAB_DIR/tftp_data:/srv/tftp"
     elif [[ "$svc" == "snmp" ]]; then
       log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/snmp_config"
