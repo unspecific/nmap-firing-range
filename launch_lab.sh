@@ -139,10 +139,10 @@ get_command_for_service() {
       echo "sh -c 'apk add --no-cache busybox-extras && telnetd -F -l $TELNET_LOGIN'"
       ;;
     other)
-      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \"$flag\" > /banner && while true; do cat /banner | nc -lk -p $NCPORT -q 1; done'"
+      echo "sh -c 'apk add --no-cache netcat-openbsd && echo \\\"$flag\\\" > /banner && while true; do cat /banner | nc -lk -p $NCPORT -q 1; done'"  # Netcat command directly
       ;;
     ssh)
-      echo "bash -c 'echo \"$flag\" > /etc/motd && /usr/sbin/sshd -D'"
+      echo "bash -c 'echo \\\"$flag\\\" > /etc/motd && /usr/sbin/sshd -D'"  # SSH command directly    
       ;;
     http|dvwa|smtp|imap|pop|vnc)
       echo ""  # Defaults to image CMD
@@ -165,7 +165,7 @@ declare -A services=(
   ["ftp"]="tcp:21"
   ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
   ["telnet"]="tcp:23"
-  ["other"]="tcp:$NCPORT"
+  ["special"]="tcp:$NCPORT"
   ["tftp"]="udp:69"
   ["snmp"]="udp:161"
   ["smtp"]="tcp:25"
@@ -300,8 +300,8 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || \
 log silent " ➕  Created docker-compose.yaml"
 
 {
-echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
-echo "# Services file for sesion $SESSION_ID"
+  echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
+  echo "# Services file for sesion $SESSION_ID"
 } > "$SESSION_DIR/services.map"
 log silent " ➕  Created services.map"
 

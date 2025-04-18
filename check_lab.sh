@@ -2,7 +2,7 @@
 
 
 APP="NFR-CheckLab"
-VERSION=0.5
+VERSION=0.8
 
 echo
 echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
@@ -17,8 +17,16 @@ fi
 
 
 if [[ ! -f "$SUBMISSION_FILE" ]]; then
-  echo "❌ Submission file not found: $SUBMISSION_FILE"
-  exit 1
+  echo "❌ ScoreCard file not found: $SUBMISSION_FILE"
+  echo 
+  echo "Usage: check_lab <SCORE_CARD>"
+  echo " <SCORE_CARD> is generated in the \$PWD when launch_lab is run."
+  echo " The score_card format can be seen on GitHub. The score_card includes"
+  echo " a SESSION_ID, and your submissions for the targets you have found."
+  echo " by defaut it looks for './score_card' or you can pass it the name of the scroe card file."
+  echo
+  echo "   Please specify the score_card file you wish to use if there is not './score_card'."
+  exit 1;
 fi
 
 # -- Extract session ID from submission file --

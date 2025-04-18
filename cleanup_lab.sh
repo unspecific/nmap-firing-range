@@ -6,7 +6,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 APP="NFR Cleanup"
-VERSION="0.4"
+VERSION="0.8"
 LAB_DIR="/opt/firing-range"
 LOG_DIR="logs"
 BIN_DIR="bin"
@@ -26,6 +26,13 @@ fi
 
 if [[ ! -f "$SUBMISSION_FILE" ]]; then
   echo "❌ ScoreCard file not found: $SUBMISSION_FILE"
+  echo 
+  echo "Usage: cleanup_lab <SCORE_CARD>"
+  echo " <SCORE_CARD> is generated in the \$PWD when launch_lab is run."
+  echo " The score_card format can be seen on GitHub. The scre_card includes"
+  echo " a SESSION_ID, that ID tells the cleanup script which session to clean up after."
+  echo " by defaut it looks for './score_card' or you can pass it the name of the scroe card file."
+  echo
   echo "   Please specify the score_card file you wish to use."
   echo "   **must include session=SESSION_ID"
   exit 1;
