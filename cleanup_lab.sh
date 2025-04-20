@@ -45,7 +45,7 @@ if [[ ! $SESSION_ID ]]; then
   echo "❌ Session ID not found in $SUBMISSION_FILE"
   exit 1
 fi
-NETWORK="range-$SESSION_ID"
+NETWORK="lab_${SESSION_ID}_range-${SESSION_ID}"
 
 echo
 echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"

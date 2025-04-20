@@ -19,6 +19,21 @@ Designed as a **live-fire training ground**, this toolkit launches randomized se
 - **Session Replay**: Labs are fully archived, including mapping, target configurations, and user-submitted scorecards. Easily revisit past challenges or measure progress over time.
 - **Ideal for Nmap Drills**: Hone skills using advanced nmap switches (`-sV`, `--script`, `-p-`, `--version-intensity`, etc.) to fingerprint services and extract clues.
 
+# Supported targets
+The system has been set up with a nuber of target services.
+- http
+- ssh
+- ftp
+- smb
+- telnet
+- other
+- tftp
+- snmp
+- smtp
+- imap
+- pop
+- vnc
+
 
 # launch_lab
 
