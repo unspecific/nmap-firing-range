@@ -8,7 +8,8 @@ fi
 
 ### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
-VERSION=0.8
+APP_SHORT="NFR Launcher"
+VERSION=2.0
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
 USED_IPS=()
@@ -22,9 +23,11 @@ TELNET_DIR="telnet_flag"
 SMB_DIR="smb_flag"
 # NC_DIR="nc_flag"
 TELNET_LOGIN="telnet_login.sh"
-SESSION_ID=$(openssl rand -hex 16)
+SESSION_ID=$(openssl rand -hex 4)
 NCPORT=$(shuf -i1024-9999 -n1)
 SECONDS=0
+DOMAIN='.nfr.lab'
+
 
 ### FUNCTIONS ###
 log() {
@@ -32,13 +35,67 @@ log() {
   shift
   local message=$*
   local log
-  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
+  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP_SHORT v$VERSION] $message"
 
   if [[ "$mode" == "console" ]]; then
     echo "$message"
   fi
   echo "$log" >> "$LOGFILE"
 }
+
+#######################################################################
+# if the user wants TLS, we first create a CA
+#
+reate_ca() {
+  local ca_dir="$1"  # e.g., "$SESSION_DIR/certs"
+  mkdir -p "$ca_dir"
+
+  openssl genrsa -out "$ca_dir/ca.key" 2048
+  openssl req -x509 -new -nodes -key "$ca_dir/ca.key" \
+    -sha256 -days 365 -out "$ca_dir/ca.crt" \
+    -subj "/CN=FiringRange Lab CA"
+}
+
+#######################################################################
+# we will also create a cert for ech host launched
+create_service_cert() {
+  local ca_dir="$1"
+  local name="$2"        # e.g. ftp_host
+  local ip="$3"          # e.g. 192.168.200.101
+  local out_dir="$ca_dir/$name"
+  mkdir -p "$out_dir"
+
+  openssl genrsa -out "$out_dir/$name.key" 2048
+
+  cat > "$out_dir/$name.cnf" <<EOF
+[ req ]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[ req_distinguished_name ]
+CN = $name
+
+[ v3_req ]
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = $name
+IP.1 = $ip
+EOF
+
+  openssl req -new -key "$out_dir/$name.key" \
+    -out "$out_dir/$name.csr" \
+    -config "$out_dir/$name.cnf"
+
+  openssl x509 -req \
+    -in "$out_dir/$name.csr" \
+    -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
+    -out "$out_dir/$name.crt" \
+    -days 365 -sha256 \
+    -extfile "$out_dir/$name.cnf" -extensions v3_req
+}
+#######################################################################
 
 # Check dependancies
 check_dependencies() {
@@ -65,9 +122,9 @@ check_dependencies() {
   fi
 
   # Optional: Check network driver
-  if ! docker network ls | grep -q "$NETWORK"; then
-    echo " ℹ️   Docker network $NETWORK not found. It will be created by the script."
-  fi
+  # if ! docker network ls | grep -q "$NETWORK"; then
+  #  echo " ℹ️   Docker network $NETWORK not found. It will be created by the script."
+  # fi
 
   # Check for Docker Compose (V2 or V1 fallback)
   if ! docker compose version &>/dev/null; then
@@ -98,10 +155,92 @@ generate_flag() {
   echo "FLAG{$(openssl rand -hex 8)}"
 }
 
+create_ca() {
+  local ca_dir="$1"  # e.g., "$SESSION_DIR/certs"
+  mkdir -p "$ca_dir"
+
+  openssl genrsa -out "$ca_dir/ca.key" 2048
+  openssl req -x509 -new -nodes -key "$ca_dir/ca.key" \
+    -sha256 -days 365 -out "$ca_dir/ca.crt" \
+    -subj "/CN=FiringRange Lab CA"
+}
+
+
+get_ruser() {
+  local user_file="$LAB_DIR/conf/vusers"
+
+  if [[ ! -f "$user_file" ]]; then
+    echo "❌ User file not found: $user_file" >&2
+    return 1
+  fi
+
+  # Filter out empty or comment lines, then pick a random user
+  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$user_file")
+}
+
+get_rpass() {
+  local pass_file="$LAB_DIR/conf/vpasswords"
+
+  if [[ ! -f "$pass_file" ]]; then
+    echo "❌ Password file not found: $pass_file" >&2
+    return 1
+  fi
+
+  # Filter out empty or comment lines, then pick a random password
+  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$pass_file")
+}
+
+get_unique_hostname() {
+  local conf_file="$LAB_DIR/conf/hostname.conf"
+  [[ -f "$conf_file" ]] || {
+    echo "❌ Hostname config not found: $conf_file" >&2
+    return 1
+  }
+
+  local in_section=""
+  local adjectives=()
+  local nouns=()
+
+  # Read and categorize lines
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=$(echo "$line" | xargs)  # Trim whitespace
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+
+    case "$line" in
+      "[ADJECTIVES]") in_section="adjective" ;;
+      "[NOUNS]")      in_section="noun" ;;
+      *)
+        if [[ "$in_section" == "adjective" ]]; then
+          adjectives+=("$line")
+        elif [[ "$in_section" == "noun" ]]; then
+          nouns+=("$line")
+        fi
+        ;;
+    esac
+  done < "$conf_file"
+
+  local max_attempts=100
+  local attempt=0
+
+  while (( attempt++ < max_attempts )); do
+    local adj=${adjectives[$RANDOM % ${#adjectives[@]}]}
+    local noun=${nouns[$RANDOM % ${#nouns[@]}]}
+    local name="${adj}-${noun}"
+
+    if [[ -z "${USED_HOSTNAMES[$name]}" ]]; then
+      USED_HOSTNAMES["$name"]=1
+      echo "${name}${DOMAIN}"
+      return 0
+    fi
+  done
+
+  echo "❌ Unable to generate unique hostname after $max_attempts attempts" >&2
+  return 1
+}
 
 get_random_ip() {
   while :; do
-    last_octet=$(shuf -i2-254 -n1)
+    last_octet=$(shuf -i130-250 -n1)
     ip="$SUBNET.$last_octet"
     if [[ ! " ${USED_IPS[*]} " =~ $ip ]]; then
       USED_IPS+=("$ip")
@@ -111,6 +250,28 @@ get_random_ip() {
   done
 }
 
+load_emulated_services() {
+  local services_dir="$LAB_DIR/bin/services"
+  local script svc port
+  SERVICE_LIST=()
+
+  for script in "$services_dir"/*.sh; do
+    [[ -f "$script" ]] || continue
+
+    svc=$(basename "$script" .sh)
+    port=$(grep -E '^EM_PORT=' "$script" | cut -d= -f2 | tr -d '"')
+
+    if [[ -n "$port" ]]; then
+      services["${svc}-em"]="tcp:$port"
+      SERVICE_LIST+=("$svc")
+      log console "✔️  Loaded emulator: ${svc}-em on tcp:$port"
+    else
+      log console "⚠️  Skipping emulator: $svc (missing EM_PORT)"
+    fi
+  done
+}
+
+
 get_image_for_service() {
   case $1 in
     http) echo "nginx" ;;
@@ -119,8 +280,8 @@ get_image_for_service() {
     smb) echo "dperson/samba" ;;
     dvwa) echo "citizenstig/dvwa" ;; 
     telnet|other) echo "alpine" ;;
-    tftp) echo "panubo/tftp" ;;
-    snmp) echo "linuxserver/snmp" ;;
+    tftp) echo "pghalliday/tftp" ;;
+    snmp) echo "leprechaun/snmpd" ;;
     smtp) echo "namshi/smtp" ;;
     imap|pop) echo "tvial/docker-mailserver" ;;
     vnc) echo "dorowu/ubuntu-desktop-lxde-vnc" ;;
@@ -151,10 +312,11 @@ get_command_for_service() {
       echo ""
       ;;
     snmp)
-      echo "sh -c 'echo \"$flag\" > /usr/share/snmp/snmpd.conf && /etc/init.d/snmpd start && tail -f /dev/null'"  # Adjust depending on image
+      echo ""
       ;;
     *)
-      echo "" ;;
+      echo ""
+     ;;
   esac
 }
 
@@ -176,7 +338,7 @@ declare -A services=(
 
 
 
-while getopts "ln:hdVi:" opt; do
+while getopts "ln:hdVi:t" opt; do
   case "$opt" in
     n)
       NUM_SERVICES="$OPTARG"
@@ -189,7 +351,6 @@ while getopts "ln:hdVi:" opt; do
       echo "$APP v$VERSION by MadHat Unspecific madhat@unspecific.com"
       echo "$APP is a script that will set up a number of target's with flags"
       echo "    to scan with nmap and use it's scipts to find the flags"
-      # echo "The hosts with me in the ${SUBNET}.0\24 subnet" 
       echo
       echo "Usage: $0 [-d][-n number_of_services]"
       echo
@@ -247,6 +408,14 @@ COMPOSE_FILE="docker-compose.yml"
 SCORE_CARD="score_card"
 HOSTNAME=$(hostname)
 NETWORK=range-$SESSION_ID
+declare -A USED_HOSTNAMES=()
+
+
+
+# CA_DIR="$SESSION_DIR/certs"
+# create_ca "$CA_DIR"
+
+
 
 if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
   SESSION_DIR="/opt/firing-range/logs/lab_$REPLAY_SESSION_ID"
@@ -288,8 +457,8 @@ check_dependencies
 
 log console " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK"
 # Create network if needed
-docker network inspect "$NETWORK" >/dev/null 2>&1 || \
-  docker network create --subnet="${SUBNET}.0/24" "$NETWORK"
+# docker network inspect "$NETWORK" >/dev/null 2>&1 || \
+#  docker network create --driver bridge --subnet="${SUBNET}.0/24" --gateway="${SUBNET}.254" "$NETWORK"
 
 # Start docker-compose.yml
 {
@@ -297,13 +466,13 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || \
   echo "# SESSION_ID: $SESSION_ID"
   echo "services:"
 } > "$SESSION_DIR/$COMPOSE_FILE"
-log silent " ➕  Created docker-compose.yaml"
+log silent " Created docker-compose.yaml - ${SESSION_DIR}/${COMPOSE_FILE}"
 
 {
   echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
   echo "# Services file for sesion $SESSION_ID"
 } > "$SESSION_DIR/services.map"
-log silent " ➕  Created services.map"
+log silent " Created ${SESSION_DIR}/services.map"
 
 # Loop through services
 declare -i lab_launch=0
@@ -311,6 +480,16 @@ svc_count=1
 for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   ((lab_launch++))
   rand_ip=$(get_random_ip)
+  svc_hostname=$(get_unique_hostname)
+  echo "$svc,$svc_hostname" >> "$SESSION_DIR/hostnames.map"
+
+######################################################################
+# if TLS is used
+# HOSTNAME=
+# create_service_cert "$CA_DIR" "ftp_host" "192.168.200.101"
+# create_service_cert "$CA_DIR" "http_host" "192.168.200.102"
+#
+######################################################################
   flag=$(generate_flag)
   name="${svc}_host_${SESSION_ID}"
   image=$(get_image_for_service "$svc")
@@ -321,7 +500,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     port=$(cut -d':' -f2 <<< "$port_proto")
     log silent " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag"
     echo " ➕  Enabling Serice port #$svc_count"
-    echo "service= target= port= proto= flag=" >> "$SCORE_CARD"
+    echo "hostname= service= target= port= proto= flag=" >> "$SCORE_CARD"
     ((svc_count++))
   done
   
@@ -357,6 +536,7 @@ EOF
     echo "  $svc:"
     echo "    image: $image"
     echo "    container_name: $name"
+    echo "    hostname: $svc_hostname"
     echo "    networks:"
     echo "      $NETWORK:"
     echo "        ipv4_address: $rand_ip"
@@ -367,8 +547,8 @@ EOF
       echo "      - \"$port/$proto\""
     done
 
+    log silent " ➕  Creating $svc assets"
     if [[ "$svc" == "ftp" ]]; then
-      log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$FTP_DIR"
       echo "$flag" > "$SESSION_DIR/$FTP_DIR/flag.txt"
       echo "README - nothing to see here" > "$SESSION_DIR/$FTP_DIR/README.txt"
@@ -384,40 +564,54 @@ EOF
       echo "      - ADDED_FLAGS=-d -d"
       # echo "    command: \"/run.sh -d\""
     elif [[ "$svc" == "telnet" ]]; then
-      log silent " ➕  Creating $svc assets"
       echo "    volumes:"
       echo "      - $SESSION_DIR/$TELNET_DIR/$TELNET_LOGIN:/fake_login.sh:ro"
     elif [[ "$svc" == "tftp" ]]; then
-      log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/tftp_data"
       echo "$flag" > "$LAB_DIR/tftp_data/flag.txt"
       echo "    volumes:"
-      echo "      - $LAB_DIR/tftp_data:/srv/tftp"
+      echo "      - $LAB_DIR/tftp_data:/tftp"
+      echo "    environment:"
+      echo "      - PGID=1000"
+      echo "      - PUID=1000"
+      echo "      - UMASK=022"
     elif [[ "$svc" == "snmp" ]]; then
-      log silent " ➕  Creating $svc assets"
-      mkdir -p "$LAB_DIR/snmp_config"
-      echo "rocommunity public" > "$LAB_DIR/snmp_config/snmpd.conf"
-      echo "# FLAG: $flag" >> "$LAB_DIR/snmp_config/snmpd.conf"
+      mkdir -p "$LAB_DIR/snmp_flag"
+      echo "$flag" > "$LAB_DIR/snmp_flag/sysDescr.txt"
       echo "    volumes:"
-      echo "      - $LAB_DIR/snmp_config:/config"
+      echo "      - $LAB_DIR/snmp_flag:/usr/share/snmp"
     elif [[ "$svc" == "vnc" ]]; then
-      log silent " ➕  Creating $svc assets"
       mkdir -p "$LAB_DIR/vnc_flag"
       echo "$flag" > "$LAB_DIR/vnc_flag/FLAG.txt"
       echo "    environment:"
       echo "      - VNC_PASSWORD=password"
+    elif [[ "$svc" == "smtp" ]]; then
+      mkdir -p "$LAB_DIR/smtp_flag"
+      echo "$flag" > "$LAB_DIR/smtp_flag/email.txt"
+      echo "    volumes:"
+      echo "      - $LAB_DIR/smtp_flag:/var/mail"
+      echo "    environment:"
+      echo "      - RELAY_NETWORKS=:0.0.0.0/0"
+      echo "      - MAILNAME=firing-range.local"
     elif [[ "$svc" == "smb" ]]; then
       log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$SMB_DIR"
     elif [[ "$svc" == "http" ]]; then
-      log silent " ➕  Creating $svc assets"
       mkdir -p "$SESSION_DIR/$WEB_DIR"
       echo "<html><body><h1>Welcome to $svc</h1><p>$flag</p></body></html>" > "${SESSION_DIR}/${WEB_DIR}/index.html"
       echo "    volumes:"
       echo "      - $LAB_DIR/web_content:/usr/share/nginx/html:ro"
     fi
+    # For TLS Support.
+    #  volumes:
+    #  - ./certs/http_host/http_host.crt:/certs/server.crt:ro
+    #  - ./certs/http_host/http_host.key:/certs/server.key:ro
+    #  echo "    environment:"
+    #  echo "      - SSL_CERT_PATH=/certs/server.crt"
+    #  echo "      - SSL_KEY_PATH=/certs/server.key"
+
     if [[ -n "$command_block" ]]; then
-      log silent " ➕  Adding Command to docker-compose"
+      log silent " ➕  Adding Command ${svc} to docker-compose"
       echo "    command: \"$command_block\""
     fi
   } >> "$SESSION_DIR/$COMPOSE_FILE"
@@ -426,7 +620,7 @@ EOF
   for port_proto in "${ports[@]}"; do
     proto=$(cut -d':' -f1 <<< "$port_proto")
     port=$(cut -d':' -f2 <<< "$port_proto")
-    echo "$svc: IP=$rand_ip Port=$port Proto=$proto Flag=$flag" >> "$SESSION_DIR/mapping.txt"
+    echo "$svc: Hostname=$svc_hostname IP=$rand_ip Port=$port Proto=$proto Flag=$flag" >> "$SESSION_DIR/mapping.txt"
   done
   if (( NUM_SERVICES > 0 && lab_launch >= NUM_SERVICES )); then
     # echo "$NUM_SERVICES Launched"
@@ -442,9 +636,12 @@ chown "$REAL_USER:$REAL_USER" "$SCORE_CARD"
 cat >> "$SESSION_DIR/$COMPOSE_FILE" <<EOF
 networks:
   ${NETWORK}:
-    external: true
+     ipam:
+        config:
+        - subnet: ${SUBNET}.0/24
+          gateway: ${SUBNET}.254
 EOF
-log silent " ➕  Finished Creaeting $COMPOSE_FILE "
+log silent " Finished Creaeting ${SESSION_DIR}/${COMPOSE_FILE} "
 
 
 ((svc_count--))

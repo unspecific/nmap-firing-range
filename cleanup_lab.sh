@@ -6,7 +6,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 APP="NFR Cleanup"
-VERSION="0.8"
+VERSION="2.0"
 LAB_DIR="/opt/firing-range"
 LOG_DIR="logs"
 BIN_DIR="bin"
@@ -93,7 +93,7 @@ done
 
 # Remove the specific network for the lab environment (do not remove all networks)
 echo " 🌐 Removing lab network ($NETWORK)"
-docker network rm $NETWORK &>/dev/null || echo " ⚠️  Network $NETWORK not found or already removed."
+docker network rm $NETWORK &>/dev/null || echo " ⚠️  Network $NETWORK verified shut down."
 
 
 echo " ✅ ScoreCard being backed up."
