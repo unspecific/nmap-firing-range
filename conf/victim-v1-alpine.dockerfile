@@ -7,12 +7,12 @@ LABEL description="Victim container for nmap firing range (tiny)"
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install services & tools
-RUN apk add --no-cache \
+RUN apk update && apk add --no-cache \
     bash \
     openssh-server \
     samba samba-common-tools \
     dnsmasq \
-    busybox-syslogd \
+    rsyslog \
     nmap-ncat
 
 # Create directory for session-mounted volume
