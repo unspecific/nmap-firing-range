@@ -1,6 +1,13 @@
 #!/bin/bash
 # fake_smtp.sh — Basic SMTP simulation with banner, EHLO, and MAIL FROM handling
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific MTA"
+EM_DESC="Custom interface"  # Short description for listing output
+
+
 echo "220 fake-smtp.local ESMTP Postfix"
 
 while read -r line; do

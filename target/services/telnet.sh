@@ -1,6 +1,13 @@
 #!/bin/bash
 
-echo -e "Welcome to FakeTelnet v1.0\r"
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="tcp:23"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific TELNETd"
+EM_DESC="Telnet emulator"  # Short description for listing output
+
+
+echo -e "Welcome to ${EM_DAEMON} v${EM_VERSION}\r"
 
 correct_user="admin"
 correct_pass="letmein"

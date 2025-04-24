@@ -1,5 +1,10 @@
 #!/bin/bash
 # ncat -kl 11211 --sh-exec "/launch/fake_memcached.sh" &
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific memcached"
+EM_DESC="Custom interface"  # Short description for listing output
 
 
 echo -e "VERSION 1.5.22-fake\r"

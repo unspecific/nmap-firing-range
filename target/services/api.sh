@@ -1,6 +1,12 @@
 #!/bin/bash
 EXE=$@
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="8080 8443:tls"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DESC="HTTP REST API interface"  # Short description for listing output
+EM_DAEMON="Unspecific/API"
+
 # Read the request line (e.g., "GET /api/flag HTTP/1.1")
 read request
 method=$(echo "$request" | awk '{print $1}')

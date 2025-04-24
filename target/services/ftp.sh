@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="21"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific FTPd"
+EM_DESC="FTPd emulator, brute force capable"  # Short description for listing output
+
+
 correct_user="ftpuser"
 correct_pass="ftp123"
 max_attempts=5

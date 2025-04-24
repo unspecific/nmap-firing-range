@@ -1,4 +1,10 @@
 #!/bin/bash
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="tcp:80 tcp:443:tls"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific HTTPd"
+EM_DESC="Custom interface"  # Short description for listing output
+
 
 # Function to handle an HTTP request line
 get_response() {

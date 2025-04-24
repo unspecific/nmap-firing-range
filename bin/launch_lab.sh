@@ -9,24 +9,21 @@ fi
 ### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
 APP_SHORT="NFR Launcher"
-VERSION=2.0
+VERSION="2.0"
+
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
 USED_IPS=()
 NUM_SERVICES=5
-LAB_DIR="/opt/firing-range"
-BIN_DIR="bin"
-FTP_DIR="ftp_flag"
-WEB_DIR="web_flag"
-LOG_DIR="logs"
-TELNET_DIR="telnet_flag"
-SMB_DIR="smb_flag"
-# NC_DIR="nc_flag"
-TELNET_LOGIN="telnet_login.sh"
 SESSION_ID=$(openssl rand -hex 4)
 NCPORT=$(shuf -i1024-9999 -n1)
 SECONDS=0
-DOMAIN='.nfr.lab'
+
+LAB_DIR="/opt/firing-range"
+BIN_DIR="bin"
+LOG_DIR="logs"
+DOMAIN=".nfr.lab"
+DEBUG=true
 
 
 ### FUNCTIONS ###
@@ -37,10 +34,18 @@ log() {
   local log
   log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP_SHORT v$VERSION] $message"
 
-  if [[ "$mode" == "console" ]]; then
+  if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
     echo "$message"
   fi
   echo "$log" >> "$LOGFILE"
+}
+
+print_services_list() {
+  echo
+  echo " 🔧  Available services:"
+  for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
+    echo "  - $svc"
+  done
 }
 
 #######################################################################
@@ -251,24 +256,48 @@ get_random_ip() {
 }
 
 load_emulated_services() {
-  local services_dir="$LAB_DIR/bin/services"
-  local script svc port
+  log silent "Loading Service Emulation modules..."
+  local services_dir="$LAB_DIR/target/services"
+  local script svc port desc version
+
   SERVICE_LIST=()
 
   for script in "$services_dir"/*.sh; do
     [[ -f "$script" ]] || continue
+    log silent " - Loading $script"
 
     svc=$(basename "$script" .sh)
     port=$(grep -E '^EM_PORT=' "$script" | cut -d= -f2 | tr -d '"')
+    desc=$(grep -E '^EM_DESC=' "$script" | cut -d= -f2- | tr -d '"')
+    version=$(grep -E '^EM_VERSION=' "$script" | cut -d= -f2 | tr -d '"')
 
     if [[ -n "$port" ]]; then
       services["${svc}-em"]="tcp:$port"
       SERVICE_LIST+=("$svc")
-      log console "✔️  Loaded emulator: ${svc}-em on tcp:$port"
+      log silent "✔️  Loaded emulator: ${svc}-em on tcp:$port"
     else
-      log console "⚠️  Skipping emulator: $svc (missing EM_PORT)"
+      log silent "⚠️  Skipping emulator: $svc (missing EM_PORT)"
     fi
   done
+
+  if [[ "$list_services_only" == true ]]; then
+    echo
+    echo " 📋 Emulated Service Modules:"
+    echo " ───────────────────────────────────────────────"
+    printf "  %-12s %-10s %s\n" "Service" "Version" "Description"
+    printf "  %-12s %-10s %s\n" "───────" "───────" "────────────"
+
+    for svc in "${SERVICE_LIST[@]}"; do
+      script="$services_dir/${svc}.sh"
+      port=$(grep -E '^EM_PORT=' "$script" | cut -d= -f2 | tr -d '"')
+      desc=$(grep -E '^EM_DESC=' "$script" | cut -d= -f2- | tr -d '"')
+      version=$(grep -E '^EM_VERSION=' "$script" | cut -d= -f2 | tr -d '"')
+
+      printf "  %-12s %-10s %s\n" "$svc" "${version:-N/A}" "${desc:-No description provided}"
+    done
+    echo
+    exit 0
+  fi
 }
 
 
@@ -320,6 +349,9 @@ get_command_for_service() {
   esac
 }
 
+# this is where the code starts
+# we have to declare our starting point.
+# this will change soon-ish
 
 declare -A services=(
   ["http"]="tcp:80"
@@ -336,7 +368,9 @@ declare -A services=(
   ["vnc"]="tcp:5900"
 )
 
-
+# Let's look at the options.
+# Make sure we identify all the flags used.
+# remember process flow
 
 while getopts "ln:hdVi:t" opt; do
   case "$opt" in
@@ -348,28 +382,28 @@ while getopts "ln:hdVi:t" opt; do
       ;;
     h)
       echo
-      echo "$APP v$VERSION by MadHat Unspecific madhat@unspecific.com"
-      echo "$APP is a script that will set up a number of target's with flags"
-      echo "    to scan with nmap and use it's scipts to find the flags"
+      echo "$APP v$VERSION by Lee 'MadHat' Heath <lheath@unspecifc.com>"
+      echo "$APP_SHORT sets up a virtual lab network of containerized targets for offensive security testing."
+      echo "Each lab session is unique with randomized IPs, hostnames, services, and flags."
+      echo "Targets support full TLS using a session-specific certificate authority (CA)."
+      echo "Sessions are fully scorable using the score_card system, and all labs are replayable."
+      echo "Perfect for practicing Nmap scanning, service fingerprinting, brute forcing, and flag hunting."
       echo
-      echo "Usage: $0 [-d][-n number_of_services]"
+      echo "Usage: $0 [options]"
       echo
-      echo "-d  Do not run.  This i a dry run.  No Docker containers started"
-      echo "-n <num_services>  Start # of services/hosts. Default: 5"
-      echo "-i <SESSION_ID>   to replay the session with that <SESSION_ID>"
-      echo "-V   shows the Version of the app and exits"
+      echo "Options:"
+      echo "  -n <number>      Launch specified number of targets (default: 5)"
+      echo "  -d               Dry run (do not launch Docker containers)"
+      echo "  -i <SESSION_ID>  Replay existing session"
+      echo "  -t               Skip TLS/SSL cert generation"
+      echo "  -l               List available services (both native and emulated)"
+      echo "  -V               Show version and exit"
+      echo "  -h               Show this help message"
       echo
       exit 0
       ;;
     l)
-      echo
-      echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
-      echo 
-      echo "The following services are supported on this firing range."
-      for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
-        echo "$svc"
-      done
-      exit 0
+      list_services_only=true
       ;;
     V)
       echo
@@ -379,6 +413,9 @@ while getopts "ln:hdVi:t" opt; do
       ;;
     i)
       REPLAY_SESSION_ID="$OPTARG"
+      ;;
+    t)
+      sklp_tls=true
       ;;
     \?)
       echo "❌ Invalid option: -$OPTARG" >&2
@@ -408,14 +445,8 @@ COMPOSE_FILE="docker-compose.yml"
 SCORE_CARD="score_card"
 HOSTNAME=$(hostname)
 NETWORK=range-$SESSION_ID
+NUM_SERVICES="${NUM_SERVICES:-5}"
 declare -A USED_HOSTNAMES=()
-
-
-
-# CA_DIR="$SESSION_DIR/certs"
-# create_ca "$CA_DIR"
-
-
 
 if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
   SESSION_DIR="/opt/firing-range/logs/lab_$REPLAY_SESSION_ID"
@@ -440,6 +471,9 @@ if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
   exit 0
 fi
 
+# Load emulated services
+# alos covers -l option
+load_emulated_services
 
 log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 log console " 🚀  Launching random lab at $SESSION_TIME"
@@ -454,6 +488,16 @@ log console " 🆔  SESSION_ID $SESSION_ID"
 log console " 📊  Score Card Created"
 
 check_dependencies
+
+CA_DIR="$SESSION_DIR/certs"
+
+if [[ "$skip_tls" != true ]]; then
+  log silent "🔐 Creating new CA for session at $CA_DIR"
+  create_ca "$CA_DIR"
+else
+  log silent "⚠️  TLS setup skipped (--no-tls enabled)"
+fi
+
 
 log console " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK"
 # Create network if needed

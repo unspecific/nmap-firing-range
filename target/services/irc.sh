@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific IRDd"
+EM_DESC="Custom interface"  # Short description for listing output
+
+
 echo -e ":irc.fakecorp.net 001 user :Welcome to FakeIRC!\r"
 echo -e ":irc.fakecorp.net 002 user :Your host is FakeIRC 1.0, running on Bash\r"
 echo -e ":irc.fakecorp.net 003 user :This server was created for you\r"

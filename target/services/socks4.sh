@@ -1,4 +1,9 @@
 #!/bin/bash
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DESC="Custom interface"  # Short description for listing output
+EM_DAEMON="Unspecific SOCKS4"
 
 # Read first 8 bytes: VN, CD, DSTPORT, DSTIP
 read -r -n 8 handshake

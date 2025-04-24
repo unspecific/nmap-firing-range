@@ -1,4 +1,9 @@
 #!/bin/bash
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="79"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific Finger"
+EM_DESC="Finger emulator"  # Short description for listing output
 
 # Read the username being requested (only one line for finger)
 read username

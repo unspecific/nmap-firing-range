@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific SNMPd"
+EM_DESC="Custom interface"  # Short description for listing output
+
+
 # Simulated SNMP response server (read-only fake)
 # Not a real BER/ASN.1 parser — this just looks like SNMP output to users or scripts
 

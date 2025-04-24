@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="9999"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DAEMON="Unspecific POP3d"
+EM_DESC="Custom interface"  # Short description for listing output
+
 correct_user="bob"
 correct_pass="hunter2"
 max_attempts=5

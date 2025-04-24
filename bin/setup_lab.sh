@@ -3,7 +3,7 @@
 # setup_lab.sh - Installer for the Firing Range Pentest Lab
 
 APP="NFR-SetupLab"
-VERSION=0.8
+VERSION=2.0
 
 
 set -euo pipefail

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# ─── Emulator Metadata ─────────────────────────────────────────────────────
+EM_PORT="143 993:tls"               # The port this service listens on
+EM_VERSION="1.1"               # Optional version identifier
+EM_DESC="IMAP emulator, brute force enabled"  # Short description for listing output
+EM_DAEMON="Unspecific IMAPd"
+
 correct_user="bob"
 correct_pass="hunter2"
 max_attempts=5
