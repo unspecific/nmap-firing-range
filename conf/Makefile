@@ -1,7 +1,7 @@
 # ───── Image Tags ─────
-V1_TINY=unspecific.com/unspecific/victim-v1-tiny:1.0
-V1_LARGE=unspecific.com/unspecific/victim-v1-large:1.0
-V2_GUI=unspecific.com/unspecific/victim-v2-gui:1.0
+V1_TINY=unspecific/victim-v1-tiny:1.0
+V1_LARGE=unspecific/victim-v1-large:1.0
+V2_GUI=unspecific/victim-v2-gui:1.0
 
 TS=$(shell date +%Y%m%d_%H%M)
 

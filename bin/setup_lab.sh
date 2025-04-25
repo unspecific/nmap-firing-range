@@ -187,7 +187,7 @@ install_from_github() {
 
 install_conf_dir() {
   log console "📁 Installing conf directory..."
-  local target_dir="$INSTALL_DIR/$CONF_DIR"
+  local target_dir="$CONF_DIR"
 
   mkdir -p "$target_dir" || { log console "❌ Failed to create conf directory"; exit 1; }
 
@@ -355,4 +355,6 @@ log console "📁 Scripts installed to: $BIN_DIR"
 log console "📄 Symlinks (if created) are available in PATH directories."
 log console "📝 Setup log saved at: $LOGFILE"
 log console "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
+chgrp $NFR_GROUP $LOGFILE
+chmod 664 $LOGFILE
 echo
