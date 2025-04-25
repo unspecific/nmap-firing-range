@@ -1,7 +1,8 @@
 # ───── Image Tags ─────
-V1_TINY=unspecific/victim-v1-tiny:1.0
+V1_TINY=unspecific/victim-v1-tiny:1.2
 V1_LARGE=unspecific/victim-v1-large:1.0
-V2_GUI=unspecific/victim-v2-gui:1.0
+V2_SMGUI=unspecific/victim-v2-smgui:1.0
+V2_GUI=unspecific/victim-v2-gui:1.1
 
 TS=$(shell date +%Y%m%d_%H%M)
 
@@ -14,9 +15,12 @@ build-v1-large:
 	docker build -f victim-v1-debian.dockerfile -t $(V1_LARGE) .
 
 build-v2-gui:
-	docker build -f victim-v2.dockerfile -t $(V2_GUI) .
+	docker build -f victim-v2-debian.dockerfile -t $(V2_GUI) .
 
-build-all: build-v1-tiny build-v1-large build-v2-gui
+build-v2-smgui:
+	docker build -f victim-v2-alpine.dockerfile -t $(V2_GUI) .
+
+build-all: build-v1-tiny build-v1-large build-v2-gui build-v2-smgui
 
 
 # ───── Package/Export ─────
@@ -30,7 +34,10 @@ package-v1-large:
 package-v2-gui:
 	docker save $(V2_GUI) | gzip > victim-v2-gui-$(TS).tar.gz
 
-package-all: package-v1-tiny package-v1-large package-v2-gui
+package-v2-smgui:
+	docker save $(V2_SMGUI) | gzip > victim-v2-smgui-$(TS).tar.gz
+
+package-all: package-v1-tiny package-v1-large package-v2-gui package-v2-smgui
 
 
 # ───── Load ─────
@@ -44,7 +51,10 @@ load-v1-large:
 load-v2-gui:
 	gunzip -c victim-v2-gui-*.tar.gz | docker load
 
-load-all: load-v1-tiny load-v1-large load-v2-gui
+load-v2-smgui:
+	gunzip -c victim-v2-smgui-*.tar.gz | docker load
+
+load-all: load-v1-tiny load-v1-large load-v2-gui load-v2-smgui
 
 
 # ───── Push ─────
@@ -53,15 +63,16 @@ push:
 	docker push $(V1_TINY)
 	docker push $(V1_LARGE)
 	docker push $(V2_GUI)
+	docker push $(V2_SMGUI)
 
 
 # ───── Clean ─────
 
 clean:
-	rm -f victim-v1-tiny-*.tar.gz victim-v1-large-*.tar.gz victim-v2-gui-*.tar.gz
+	rm -f victim-v1-tiny-*.tar.gz victim-v1-large-*.tar.gz victim-v2-gui-*.tar.gz victim-v2-smgui-*.tar.gz
 
 clean-images:
-	docker rmi -f $(V1_TINY) $(V1_LARGE) $(V2_GUI) || true
+	docker rmi -f $(V1_TINY) $(V1_LARGE) $(V2_GUI) $(V2_SMGUI) || true
 
 clean-all: clean clean-images
 
@@ -80,19 +91,22 @@ help:
 	@echo "Build Targets:"
 	@echo "  make build-v1-tiny       Build Alpine-based victim image"
 	@echo "  make build-v1-large      Build Debian-based victim image"
-	@echo "  make build-v2-gui        Build full desktop GUI victim image"
+	@echo "  make build-v2-gui        Build Debian desktop GUI victim image"
+	@echo "  make build-v2-smgui      Build Alpine desktop GUI victim image"
 	@echo "  make build-all           Build all victim images"
 	@echo
 	@echo "Package Targets:"
 	@echo "  make package-v1-tiny     Export + gzip v1-tiny image"
 	@echo "  make package-v1-large    Export + gzip v1-large image"
 	@echo "  make package-v2-gui      Export + gzip v2-gui image"
+	@echo "  make package-v2-smgui    Export + gzip v2-smgui image"
 	@echo "  make package-all         Package all images"
 	@echo
 	@echo "Load Targets:"
 	@echo "  make load-v1-tiny        Load v1-tiny image from .tar.gz"
 	@echo "  make load-v1-large       Load v1-large image from .tar.gz"
 	@echo "  make load-v2-gui         Load v2-gui image from .tar.gz"
+	@echo "  make load-v2-smgui       Load v2-smgui image from .tar.gz"
 	@echo "  make load-all            Load all images"
 	@echo
 	@echo "Push Target:"

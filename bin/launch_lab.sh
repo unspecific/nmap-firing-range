@@ -397,7 +397,6 @@ declare -A services=(
   ["ssh"]="tcp:22"
   ["ftp"]="tcp:21"
   ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
-  ["other"]="tcp:$NCPORT"
   ["tftp"]="udp:69"
   ["snmp"]="udp:161"
   ["smtp"]="tcp:25 "

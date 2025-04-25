@@ -4,15 +4,19 @@
 SERVICE="${TARGET_SERVICE}"
 FLAG="${TARGET_FLAG}"
 PORT="${TARGET_PORT:-default}"
-USER="${TARGET_USER:-user}"
-PASS="${TARGET_PASS:-pass}"
+USERNAME="${TARGET_USER:-user}"
+PASSWORD="${TARGET_PASS:-pass}"
 
 echo "🏁 Launching target service: $SERVICE"
-export SERVICE FLAG PORT USER PASS
+export SERVICE FLAG PORT USERNAME PASSWORD
 
 trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
+
+add_user() {
+  # setup-user [-h] [-a] [-u] [-f FULLNAME] [-g GROUPS] [-k SSHKEY] [USERNAME]
+}
 
 launch_ssh() {
   echo "$FLAG" > /etc/motd
