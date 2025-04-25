@@ -1,19 +1,19 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="21"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific FTPd"
+EM_PORT="tcp:21 tcp:990:tls"               # The port this service listens on
+EM_VERSION="3.6"               # Optional version identifier
+EM_DAEMON="FakeFTPd"
 EM_DESC="FTPd emulator, brute force capable"  # Short description for listing output
 
 
-correct_user="ftpuser"
-correct_pass="ftp123"
+correct_user="$USERNAME"
+correct_pass="$PASSWORD"
 max_attempts=5
 attempts=0
 authenticated=false
 
-echo -e "220 Welcome to FakeFTP Server"
+echo -e "220 Welcome to $EM_DAEMON/$EM_VERSION"
 
 while IFS= read -r line; do
     cmd=$(echo "$line" | awk '{print $1}')
@@ -63,7 +63,7 @@ while IFS= read -r line; do
         RETR)
             if [[ "$arg" == "secret.txt" ]]; then
                 echo "150 Opening BINARY mode data connection for secret.txt"
-                echo "flag{ftp-fun-in-bash}"
+                echo "$FLAG"
                 echo "226 Transfer complete."
             else
                 echo "550 File not found."

@@ -1,12 +1,12 @@
 #!/bin/bash
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="9999"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific IRCd"
+EM_PORT="tcp:389 tcp:636:tls"               # The port this service listens on
+EM_VERSION="14.667"               # Optional version identifier
+EM_DAEMON="FakeLDAP"
 EM_DESC="Custom interface"  # Short description for listing output
 
 
-echo -e "FakeLDAP v0.1 Ready\r"
+echo -e "$EM_DAEMON/$EM_VERSION Ready\r"
 
 while IFS= read -r line; do
     cmd=$(echo "$line" | awk '{print tolower($1)}')
@@ -23,7 +23,7 @@ while IFS= read -r line; do
             if [[ "$args" == *"cn=flag"* ]]; then
                 echo -e "dn: cn=flag,dc=fake,dc=local\r"
                 echo -e "cn: flag\r"
-                echo -e "description: flag{ldap-enumeration-win}\r"
+                echo -e "description: $FLAG\r"
                 echo -e ".\r"
             else
                 echo -e "No results found for search: $args\r"

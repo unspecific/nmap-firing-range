@@ -2,17 +2,17 @@
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
 EM_PORT="143 993:tls"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
+EM_VERSION="8.12"               # Optional version identifier
 EM_DESC="IMAP emulator, brute force enabled"  # Short description for listing output
-EM_DAEMON="Unspecific IMAPd"
+EM_DAEMON="FakeIMAPd"
 
-correct_user="bob"
-correct_pass="hunter2"
+correct_user="$USERNAME"
+correct_pass="$PASSWORD"
 max_attempts=5
 attempts=0
 authenticated=false
 
-echo -e "* OK FakeIMAP Ready [CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED]\r"
+echo -e "* OK $EM_DAEMON/$EM_VERSION Ready [CAPABILITY IMAP4rev1 STARTTLS LOGINDISABLED]\r"
 
 while IFS= read -r line; do
     tag=$(echo "$line" | awk '{print $1}')
@@ -64,7 +64,7 @@ while IFS= read -r line; do
             ;;
         FETCH)
             echo -e "* 1 FETCH (BODY[TEXT] {42}\r"
-            echo -e "flag{imap-injection-vuln-lab-420}\r"
+            echo -e "$FLAG\r"
             echo -e ")\r"
             echo -e "$tag OK FETCH completed\r"
             ;;

@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="9999"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
+EM_PORT="tcp:119 tcp:563:tls"               # The port this service listens on
+EM_VERSION="3.1"               # Optional version identifier
 EM_DESC="Custom interface"  # Short description for listing output
-EM_DAEMON="Unspecific NNTPd"
+EM_DAEMON="FakeNNTPd"
 
-echo -e "200 fake-nntp.local FakeNNTP server ready\r"
+echo -e "200 $HOSTNAME $EM_DAEMON/$EM_VERSION server ready\r"
 
 authenticated=false
-correct_user="reader"
-correct_pass="news123"
+correct_user="$USERNAME"
+correct_pass="$PASSWORD"
 flag_group="alt.ctf.challenge"
-flag_article_id="<1337@fake-nntp.local>"
+flag_article_id="<1337@$HOSTNAME>"
 
 while IFS= read -r line; do
     cmd=$(echo "$line" | awk '{print $1}')
@@ -60,7 +60,7 @@ while IFS= read -r line; do
             echo -e "Message-ID: $flag_article_id\r"
             echo -e "\r"
             echo -e "Here's your flag:\r"
-            echo -e "flag{nntp-rfc3977-classic}\r"
+            echo -e "$FLAG\r"
             echo -e ".\r"
             ;;
         QUIT)

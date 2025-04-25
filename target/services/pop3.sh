@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="9999"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific POP3d"
+EM_PORT="tcp:110 tcp:995:tls"               # The port this service listens on
+EM_VERSION="9.72.12"               # Optional version identifier
+EM_DAEMON="FakePOP3d"
 EM_DESC="Custom interface"  # Short description for listing output
 
-correct_user="bob"
-correct_pass="hunter2"
+correct_user="$USERNAME"
+correct_pass="$PASSWORD"
 max_attempts=5
 attempts=0
 authenticated=false
 
-echo -e "+OK Fake POP3 server ready <12345@example.com>\r"
+echo -e "+OK $EM_DAEMON/$EM_VERSION server ready <unspecific@$HOSTNAME>\r"
 
 while IFS= read -r line; do
     case "$line" in
@@ -58,12 +58,12 @@ while IFS= read -r line; do
             ;;
         RETR*)
             echo -e "+OK 512 octets\r"
-            echo -e "From: alice@example.com\r"
-            echo -e "To: $username@example.com\r"
+            echo -e "From: alice@nfr-lab\r"
+            echo -e "To: $USERNAME@$HOSTNAME\r"
             echo -e "Subject: Your access code\r"
             echo -e "\r"
             echo -e "Here is your flag:\r"
-            echo -e "flag{pop3-rfc1939-fun}\r"
+            echo -e "$FLAG\r"
             echo -e ".\r"
             ;;
         QUIT)

@@ -1,16 +1,16 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="tcp:23"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific TELNETd"
+EM_PORT="tcp:23 tcp:992:tls"               # The port this service listens on
+EM_VERSION="3.14"               # Optional version identifier
+EM_DAEMON="FakeTELNETd"
 EM_DESC="Telnet emulator"  # Short description for listing output
 
 
 echo -e "Welcome to ${EM_DAEMON} v${EM_VERSION}\r"
 
-correct_user="admin"
-correct_pass="letmein"
+correct_user="$USERNAME"
+correct_pass="$PASSWORD"
 max_attempts=5
 attempts=0
 
@@ -23,7 +23,7 @@ while [ $attempts -lt $max_attempts ]; do
 
     if [[ "$username" == "$correct_user" && "$password" == "$correct_pass" ]]; then
         echo -e "Login successful\r"
-        echo -e "flag{telnet-auth-bypass-1337}\r"
+        echo -e "$FLAG\r"
         break
     else
         echo -e "Login incorrect\r"

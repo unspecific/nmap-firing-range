@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="9999"               # The port this service listens on
+EM_PORT="tcp:161 udp:161"               # The port this service listens on
 EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific SNMPd"
+EM_DAEMON="FakeSNMPd"
 EM_DESC="Custom interface"  # Short description for listing output
 
 
@@ -18,7 +18,7 @@ while read -r line; do
         echo "SNMPv2-MIB::sysDescr.0 = STRING: Fake SNMP Device running FakeOS 1.0"
         echo "SNMPv2-MIB::sysContact.0 = STRING: root@fake.local"
         echo "SNMPv2-MIB::sysLocation.0 = STRING: Somewhere in /dev/null"
-        echo "SNMPv2-MIB::flag.0 = STRING: flag{snmp-public-read-win}"
+        echo "SNMPv2-MIB::flag.0 = STRING: $FLAG"
     else
         echo "SNMP Error: Invalid community string"
     fi

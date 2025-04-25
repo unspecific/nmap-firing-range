@@ -1,12 +1,12 @@
 #!/bin/bash
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="9999"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DAEMON="Unspecific Redis"
+EM_PORT="tcp:6379 tcp:6380:tls"               # The port this service listens on
+EM_VERSION="6.6.6"               # Optional version identifier
+EM_DAEMON="FakeRedis"
 EM_DESC="Custom interface"  # Short description for listing output
 
 
-echo -ne "+OK FakeRedis 6.6.6 ready for connections\r\n"
+echo -ne "+OK $EM_DAEMON $EM_VERSION ready for connections\r\n"
 
 while IFS= read -r line; do
     # Optional logging
@@ -14,9 +14,9 @@ while IFS= read -r line; do
 
     # Respond to fake GET command
     if echo "$line" | grep -qi "GET"; then
-        echo -ne "\$27\r\nflag{redis-key-access-win}\r\n"
+        echo -ne "\$27\r\n$FLAG\r\n"
     elif echo "$line" | grep -qi "INFO"; then
-        echo -ne "# Server\r\nredis_version:6.6.6\r\n"
+        echo -ne "# Server\r\nredis_version:$EM_VERSION\r\n"
         echo -ne "# Clients\r\nconnected_clients:1\r\n"
         echo -ne "# Keyspace\r\ndb0:keys=1,expires=0,avg_ttl=0\r\n"
         echo -ne "\r\n"

@@ -48,7 +48,7 @@ log() {
   if [[ -f $LOGFILE ]]; then
     echo "$log" >> "$LOGFILE"
   else
-    echo "$log" >> "$LAB_DIR/lab.log"
+    echo "$log" >> "$LAB_DIR/$LOG_DIR/setup.log"
   fi
 }
 
@@ -552,14 +552,12 @@ ZONEFILE="$SESSION_DIR/$CONF_DIR/nfr.lab.zone"
 declare -A USED_HOSTNAMES=()
 
 # create lab session environment
-mkdir -p "$SESSION_DIR"
-mkdir -p "$CA_DIR"
-mkdir -p "$SESSION_DIR/$LOG_DIR"
-mkdir -p "$SESSION_DIR/$BIN_DIR"
-mkdir -p "$SESSION_DIR/$CONF_DIR"
-mkdir -p "$SESSION_DIR/$TARGET_DIR"
-mkdir -p "$SESSION_DIR/$TARGET_DIR/services"
+mkdir -p "$SESSION_DIR" "$CA_DIR" "$SESSION_DIR/$LOG_DIR"
+mkdir -p "$SESSION_DIR/$BIN_DIR" "$SESSION_DIR/$CONF_DIR"
+mkdir -p "$SESSION_DIR/$TARGET_DIR" "$SESSION_DIR/$TARGET_DIR/services"
 echo "--------- NEW SESSION $SESSION_ID ------------------" > $LOGFILE || echo "cant create logfile"
+chgrp $NFR_GROUP $LOGFILE
+chmod 664 $LOGFILE
 log silent "Initiated a new session directory $SESSION_DIR"
 
 #initiate the zone file
@@ -701,6 +699,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     done
     # Add environment variables.  Easier to pass all of them to ever servce and let the launch_target script figure it out
     echo "    environment:"
+    echo "      - HOSTNAME=$HOSTNAE"
     echo "      - USERNAME=$SESS_USER"
     echo "      - PASSWORD=$SESS_PASS"
     echo "      - FLAG=$flag"
