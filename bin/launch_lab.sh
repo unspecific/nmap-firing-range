@@ -399,8 +399,8 @@ parse_meta_var() {
 
 get_image_for_service() {
   case $1 in
-    *-em) echo "unspecific/victim-v1-tiny:1.2" ;;
-    *) echo "unspecific/victim-v1-tiny:1.2" ;;
+    *-em) echo "unspecific/victim-v1-tiny:1.3" ;;
+    *) echo "unspecific/victim-v1-tiny:1.3" ;;
   esac
 }
 
@@ -622,7 +622,7 @@ load_session_file "$CONF_DIR/dnsmasq.conf"
 
 cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
 chmod 755 "$SESSION_DIR/$TARGET_DIR/launch_target.sh"
-chmod 755 "$SESSION_DIR/$TARGET_DIR/services/service_emulator.sh"
+chmod 755 "$SESSION_DIR/$TARGET_DIR/services/service_emulator_v2.sh"
 
 ######################################################################
 # if TLS is used

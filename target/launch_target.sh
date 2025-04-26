@@ -43,8 +43,8 @@ launch_tftp() {
 
 launch_emulator() {
   local proto="${SERVICE%-em}"
-  if [[ -x /opt/target/service_emulator.sh ]]; then
-    /opt/target/service_emulator.sh "$proto" "$FLAG"
+  if [[ -x /opt/target/service_emulator_v2.sh ]]; then
+    /opt/target/service_emulator_v2.sh "$proto" "$FLAG"
   else
     echo "❌ Emulator script missing or not executable."
     exit 1
@@ -66,4 +66,4 @@ case "$SERVICE" in
   *)        launch_generic ;;
 esac
 
-tail -f /dev/null
+bash

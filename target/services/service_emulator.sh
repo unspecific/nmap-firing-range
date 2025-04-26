@@ -4,18 +4,13 @@
 # Emulates basic interaction for text-based protocols (FTP, SMTP, etc.) for testing and Nmap banner detection
 # Usage: ./service_emulator.sh <service> <flag>
 
-# Check for root privileges, re-run with sudo if needed
-if [[ "$EUID" -ne 0 ]]; then
-  echo "🔒 Root access required. Re-running with sudo..."
-  exec sudo "$0" "$@"
-fi
-
 # Allow CLI args to override env vars
 if [[ -n "$1" ]]; then SERVICE="$1"; fi
 if [[ -n "$2" ]]; then FLAG="$2"; fi
 
 SERVICE="${SERVICE:-}"
 FLAG="${FLAG:-}"
+PORT="$PORT"
 
 if [[ -z "$SERVICE" || -z "$FLAG" ]]; then
   echo "Usage: $0 <service> <flag>"
@@ -288,7 +283,6 @@ handle_nntp() {
         echo "."
         ;;
       QUIT)
-        echo "205 closing connection - goodbye"
         break
         ;;
       *)
