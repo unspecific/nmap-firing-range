@@ -3,7 +3,7 @@
 EM_PORT="tcp:79"               # The port this service listens on
 EM_VERSION="6.99"               # Optional version identifier
 EM_DAEMON="FakeFinger"
-EM_DESC="Finger is a simple netwrk protocol for sharing personal information."  # Short description for listing output
+EM_DESC="Simple Service sharing personal information."  # Short description for listing output
 
 # Read the username being requested (only one line for finger)
 read username

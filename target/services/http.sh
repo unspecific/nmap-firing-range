@@ -3,7 +3,7 @@
 EM_PORT="tcp:80 tcp:443:tls"               # The port this service listens on
 EM_VERSION="1.1"               # Optional version identifier
 EM_DAEMON="FakeHTTPd"
-EM_DESC="HTTP/web server for showing media"  # Short description for listing output
+EM_DESC="HTTP/web server it's API?"  # Short description for listing output
 
 # need to rewrite this.
 

@@ -4,7 +4,7 @@
 EM_PORT="tcp:9999 tcp:9443:tls"               # The port this service listens on
 EM_VERSION="32.1"               # Optional version identifier
 EM_DAEMON="Unspecific"
-EM_DESC="Unspecific company has a custom API for use with a propriatary client"  # Short description for listing output
+EM_DESC="Custom API for propriatary client"  # Short description for listing output
 
 # Function to process input and return response
 get_response() {

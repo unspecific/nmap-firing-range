@@ -4,7 +4,7 @@
 EM_PORT="tcp:11211"               # The port this service listens on
 EM_VERSION="6.1"               # Optional version identifier
 EM_DAEMON="memfaked"
-EM_DESC="Custom interface"  # Short description for listing output
+EM_DESC="Key-Value temp storage"  # Short description for listing output
 
 
 echo -e "VERSION ${EM_VERSION}_${EM_DAEMON}\r"
@@ -18,7 +18,7 @@ while IFS= read -r line; do
         stats)
             echo -e "STAT pid 31337\r"
             echo -e "STAT uptime 123456\r"
-            echo -e "STAT version 1.5.22\r"
+            echo -e "STAT version $EM_VERSION\r"
             echo -e "STAT curr_items 1\r"
             echo -e "STAT bytes 1337\r"
             echo -e "STAT curr_connections 2\r"

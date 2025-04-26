@@ -3,7 +3,7 @@
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
 EM_PORT="143 993:tls"               # The port this service listens on
 EM_VERSION="8.12"               # Optional version identifier
-EM_DESC="IMAP emulator, brute force enabled"  # Short description for listing output
+EM_DESC="IMAP4 emulator, brute force enabled"  # Short description for listing output
 EM_DAEMON="FakeIMAPd"
 
 correct_user="$USERNAME"

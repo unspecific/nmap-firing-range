@@ -168,8 +168,9 @@ generate_flag() {
   echo "FLAG{$(openssl rand -hex 8)}"
 }
 
-get_ruser() {
-  local user_file="$LAB_DIR/conf/vusers"
+get_vuser() {
+  log silent "Grabbing a random victim user"
+  local user_file="$LAB_DIR/conf/vusers.conf"
 
   if [[ ! -f "$user_file" ]]; then
     echo "❌ User file not found: $user_file" >&2
@@ -180,8 +181,9 @@ get_ruser() {
   shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$user_file")
 }
 
-get_rpass() {
-  local pass_file="$LAB_DIR/conf/vpasswds"
+get_vpass() {
+  log silent "Grabbing a random victim password"
+  local pass_file="$LAB_DIR/conf/vpasswds.conf"
 
   if [[ ! -f "$pass_file" ]]; then
     echo "❌ Password file not found: $pass_file" >&2
@@ -190,6 +192,19 @@ get_rpass() {
 
   # Filter out empty or comment lines, then pick a random password
   shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$pass_file")
+}
+
+get_vcommunity() {
+  log silent "Grabbing a random victim snmp community"
+  local comm_file="$LAB_DIR/conf/vcommunities.conf"
+
+  if [[ ! -f "$comm_file" ]]; then
+    echo "❌ Community file not found: $comm_file" >&2
+    return 1
+  fi
+
+  # Filter out empty or comment lines, then pick a random password
+  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$comm_file")
 }
 
 get_unique_hostname() {
@@ -306,9 +321,9 @@ load_emulated_services() {
     # header and formating for crisp output
     echo
     echo " 📋 Target Service Modules:"
-    echo " ───────────────────────────────────────────────"
-    printf "  %-12s\t%-16s\t%-10s\t%s\n" "Service" "Daemon" "Port" "Description"
-    printf "  %-12s\t%-16s\t%-10s\t%s\n" "───────" "─────────────────────" "──────────" "─────────────────────"
+    echo " ────────────────────────────────────────────────────────────────────"
+    printf "  %-12s\t%-10s\t%-8s\t%s\n" "Service" "Daemon" "Port" "Description"
+    printf "  %-12s\t%-10s\t%-8s\t%s\n" "───────" "─────────────" "──────────" "─────────────────────"
 
     # List full services
     for svc in $(printf "%s\n" "${!services[@]}"); do
@@ -329,9 +344,9 @@ load_emulated_services() {
           fi
         done
         if [[ -n "$tls" ]]; then
-          printf "  %-12s\t%-16s\t%-10s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
         else 
-          printf "  %-12s\t%-16s\t%-10s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
         fi
 
       fi
@@ -340,9 +355,9 @@ load_emulated_services() {
     # Now let's look at the Emulated services we just loaded.
     echo
     echo " 📋 Emulated Service Modules:"
-    echo " ───────────────────────────────────────────────"
-    printf "  %-12s\t%-16s\t%-10s\t%s\n" "Service" "Daemon" "Port" "Description"
-    printf "  %-12s\t%-16s\t%-10s\t%s\n" "───────" "─────────────────────" "──────────" "─────────────────────"
+    echo " ────────────────────────────────────────────────────────────────────"
+    printf "  %-12s\t%-10s\t%-8s\t%s\n" "Service" "Daemon" "Port" "Description"
+    printf "  %-12s\t%-10s\t%-8s\t%s\n" "───────" "─────────────" "──────────" "─────────────────────"
 
     # List emulated services
     for svc in "${SERVICE_LIST[@]}"; do
@@ -360,9 +375,9 @@ load_emulated_services() {
         port=$(cut -d':' -f2 <<< "$port_proto")
         tls=$(cut -d':' -f3 <<< "$port_proto")
         if [[ -n "$tls" ]]; then
-          printf "  %-12s\t%-16s\t%-10s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
         else 
-          printf "  %-12s\t%-16s\t%-10s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
         fi
       done
     if [[ "$DEBUG" == "ture" ]]; then
@@ -412,15 +427,15 @@ declare -A services_meta=(
   ["http"]="2.0:TheWebServer:Web server running nginx"
   ["ssh"]="2.0:OpenSSHd:SSH server running openssh server"
   ["ftp"]="1.0:vsFTP:FTP server running vsftpd"
-  ["smb"]="1.0:Samba:Sambe server with shares, brute force enabled"
+  ["smb"]="1.0:Samba:Samba+shares, brute force enabled"
   ["telnet"]="1.0:Telnet:Telnet server"
   ["other"]="1.0:Unspecific:Custom intrerface"
   ["tftp"]="1.0:tftp-hpa:TFTP server...  tricky"
   ["snmp"]="1.0:net-snmp:SNMP server, guess the community"
-  ["smtp"]="1.0:opensmtp:"
-  ["imap"]="1.0:dovcot:Check your ail, brute force the account"
-  ["pop"]="1.0:dovecot:Check your ail, brute force the account"
-  ["vnc"]="1.0:VNC:Only available with victim-v2-giu"
+  ["smtp"]="1.0:opensmtp:Mail Transport"
+  ["imap"]="1.0:imap4d:Check your Mail"
+  ["pop"]="1.0:pop3d:Check your Mail"
+  ["vnc"]="1.0:VNC:Only available with victim-v2"
 )
 
 # Let's look at the options.
@@ -688,8 +703,9 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   echo "$name" >> "$SESSION_DIR/services.map"
 
   # we will generate a new username and password combination for each service.
-  SESS_USER=$(get_ruser)
-  SESS_PASS=$(get_rpass)
+  SESS_USER=$(get_vuser)
+  SESS_PASS=$(get_vpass)
+  SESSION_COMMUNITY=$(get_vcommunity)
 
   # Write to docker-compose.yml with proper indentation
   {
@@ -711,6 +727,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     echo "      - HOSTNAME=$HOSTNAE"
     echo "      - USERNAME=$SESS_USER"
     echo "      - PASSWORD=$SESS_PASS"
+    echo "      - COMMUNITY=$SESS_COMMUNITY"
     echo "      - FLAG=$flag"
     echo "      - SERVICE=$svc"
     echo "      - PORTS=$ports"

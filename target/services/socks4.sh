@@ -1,8 +1,8 @@
 #!/bin/bash
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
 EM_PORT="tcp:1080 tcp:1443:"               # The port this service listens on
-EM_VERSION="1.1"               # Optional version identifier
-EM_DESC="Custom interface"  # Short description for listing output
+EM_VERSION="2.4"               # Optional version identifier
+EM_DESC="Minimal SOCK4 Proxy"  # Short description for listing output
 EM_DAEMON="FakeSOCKS4"
 
 # Read first 8 bytes: VN, CD, DSTPORT, DSTIP
@@ -30,4 +30,4 @@ response=$(echo -n "$hex" | sed 's/^\(..\)\(..\)\(....\)\(........\)/00 5a \3 \4
 echo "$response" | xxd -r -p
 
 # Inject flag after the handshake (as printable junk)
-echo -ne "\nflag{socks4-bash-handshake}\n"
+echo -ne "\n$FLAG\n"

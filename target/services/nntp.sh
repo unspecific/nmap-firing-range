@@ -3,8 +3,8 @@
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
 EM_PORT="tcp:119 tcp:563:tls"               # The port this service listens on
 EM_VERSION="3.1"               # Optional version identifier
-EM_DESC="Custom interface"  # Short description for listing output
-EM_DAEMON="FakeNNTPd"
+EM_DESC="NNTP with brute force"  # Short description for listing output
+EM_DAEMON="FakeNNTP"
 
 echo -e "200 $HOSTNAME $EM_DAEMON/$EM_VERSION server ready\r"
 
@@ -54,7 +54,7 @@ while IFS= read -r line; do
             ;;
         ARTICLE)
             echo -e "220 1 $flag_article_id article retrieved\r"
-            echo -e "From: challenge@example.com\r"
+            echo -e "From: challenge@nfr.lab\r"
             echo -e "Subject: Welcome\r"
             echo -e "Newsgroups: $flag_group\r"
             echo -e "Message-ID: $flag_article_id\r"

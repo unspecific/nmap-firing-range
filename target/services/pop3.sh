@@ -4,7 +4,7 @@
 EM_PORT="tcp:110 tcp:995:tls"               # The port this service listens on
 EM_VERSION="9.72.12"               # Optional version identifier
 EM_DAEMON="FakePOP3d"
-EM_DESC="Custom interface"  # Short description for listing output
+EM_DESC="POP3 with brute force"  # Short description for listing output
 
 correct_user="$USERNAME"
 correct_pass="$PASSWORD"
@@ -12,7 +12,7 @@ max_attempts=5
 attempts=0
 authenticated=false
 
-echo -e "+OK $EM_DAEMON/$EM_VERSION server ready <unspecific@$HOSTNAME>\r"
+echo -e "+OK $EM_DAEMON/$EM_VERSION server ready <root@$HOSTNAME>\r"
 
 while IFS= read -r line; do
     case "$line" in
@@ -58,7 +58,7 @@ while IFS= read -r line; do
             ;;
         RETR*)
             echo -e "+OK 512 octets\r"
-            echo -e "From: alice@nfr-lab\r"
+            echo -e "From: alice@nfr.lab\r"
             echo -e "To: $USERNAME@$HOSTNAME\r"
             echo -e "Subject: Your access code\r"
             echo -e "\r"

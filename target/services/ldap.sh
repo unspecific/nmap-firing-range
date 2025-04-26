@@ -3,7 +3,7 @@
 EM_PORT="tcp:389 tcp:636:tls"               # The port this service listens on
 EM_VERSION="14.667"               # Optional version identifier
 EM_DAEMON="FakeLDAP"
-EM_DESC="Custom interface"  # Short description for listing output
+EM_DESC="LDAP w/Anonymous access"  # Short description for listing output
 
 
 echo -e "$EM_DAEMON/$EM_VERSION Ready\r"
@@ -17,7 +17,7 @@ while IFS= read -r line; do
             echo -e "bind OK - anonymous bind accepted\r"
             ;;
         version)
-            echo -e "version: 3\r"
+            echo -e "version: $EM_DAEMON/$EM_VERSION\r"
             ;;
         search)
             if [[ "$args" == *"cn=flag"* ]]; then

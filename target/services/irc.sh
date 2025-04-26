@@ -4,7 +4,7 @@
 EM_PORT="TCP:6667 tcp:6697:tls"               # The port this service listens on
 EM_VERSION="2.6"               # Optional version identifier
 EM_DAEMON="FakeIRC"
-EM_DESC="Custom interface"  # Short description for listing output
+EM_DESC="IRCd server"  # Short description for listing output
 
 
 echo -e ":irc.fakecorp.net 001 user :Welcome to $EM_DAEMON!\r"

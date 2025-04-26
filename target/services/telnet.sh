@@ -4,7 +4,7 @@
 EM_PORT="tcp:23 tcp:992:tls"               # The port this service listens on
 EM_VERSION="3.14"               # Optional version identifier
 EM_DAEMON="FakeTELNETd"
-EM_DESC="Telnet emulator"  # Short description for listing output
+EM_DESC="Telnet server, brute force enables"  # Short description for listing output
 
 
 echo -e "Welcome to ${EM_DAEMON} v${EM_VERSION}\r"

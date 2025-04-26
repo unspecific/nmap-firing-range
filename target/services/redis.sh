@@ -3,7 +3,7 @@
 EM_PORT="tcp:6379 tcp:6380:tls"               # The port this service listens on
 EM_VERSION="6.6.6"               # Optional version identifier
 EM_DAEMON="FakeRedis"
-EM_DESC="Custom interface"  # Short description for listing output
+EM_DESC="Redis with Flag in commands"  # Short description for listing output
 
 
 echo -ne "+OK $EM_DAEMON $EM_VERSION ready for connections\r\n"
