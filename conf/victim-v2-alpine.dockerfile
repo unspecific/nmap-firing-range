@@ -7,7 +7,7 @@ LABEL description="Victim container for nmap firing range (tiny)"
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install services & tools
-RUN apk update && apk add --no-cache alpine-config \
+RUN apk update && apk add --no-cache alpine-conf \
     bash openssh-server net-snmp openldap \
     samba samba-common-tools dovecot dovecot-pop3d \
     dnsmasq rsyslog nmap-ncat vsftpd tftp-hpa opensmtpd

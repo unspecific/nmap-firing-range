@@ -384,8 +384,8 @@ parse_meta_var() {
 
 get_image_for_service() {
   case $1 in
-    *-em) echo "unspecific/victim-v1-tiny:1.0" ;;
-    *) echo "unspecific/victim-v1-tiny:1.0" ;;
+    *-em) echo "unspecific/victim-v1-tiny:1.2" ;;
+    *) echo "unspecific/victim-v1-tiny:1.2" ;;
   esac
 }
 

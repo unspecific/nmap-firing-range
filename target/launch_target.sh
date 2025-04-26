@@ -1,5 +1,7 @@
 #!/bin/bash
 
+VERSION=1.2
+
 # ─── Input Variables ───────────────────────────────────────────────────────────
 SERVICE="${TARGET_SERVICE}"
 FLAG="${TARGET_FLAG}"
@@ -15,6 +17,7 @@ trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 # ─── Launch Routines ───────────────────────────────────────────────────────────
 
 add_user() {
+  setup-user -a -f "Victim $USERNAME" -g admin $USERNAME
   # setup-user [-h] [-a] [-u] [-f FULLNAME] [-g GROUPS] [-k SSHKEY] [USERNAME]
 }
 
@@ -62,3 +65,5 @@ case "$SERVICE" in
   *-em)     launch_emulator ;;
   *)        launch_generic ;;
 esac
+
+tail -f /dev/null
