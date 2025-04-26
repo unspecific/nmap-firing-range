@@ -31,7 +31,9 @@ BIN_DIR="bin"
 LOG_DIR="logs"
 CONF_DIR="conf"
 CERT_DIR="certs"
+TARGET_DIR="target"
 DOMAIN=".nfr.lab"
+NFR_GROUP="nfrlab"
 DEBUG=${DEBUG:-false}
 
 ### FUNCTIONS ###
@@ -97,14 +99,14 @@ EOF
 
   openssl req -new -key "$out_dir/$name.key" \
     -out "$out_dir/$name.csr" \
-    -config "$out_dir/$name.cnf"
+    -config "$out_dir/$name.cnf" 
 
-  openssl x509 -req \
+  openssl x509 -noout -req \
     -in "$out_dir/$name.csr" \
     -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
     -out "$out_dir/$name.crt" \
     -days 365 -sha256 \
-    -extfile "$out_dir/$name.cnf" -extensions v3_req
+    -extfile "$out_dir/$name.cnf" -extensions v3_req 
 }
 #######################################################################
 
@@ -560,7 +562,7 @@ chmod 664 $LOGFILE
 log silent "Initiated a new session directory $SESSION_DIR"
 
 #initiate the zone file
-echo "$SUBNET.1     core.nfr.lab" >> "$ZONEFILE"
+echo "$SUBNET.254     host.nfr.lab" >> "$ZONEFILE"
 echo "$SUBNET.2     console.nfr.lab" >> "$ZONEFILE"
 
 log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
@@ -602,7 +604,10 @@ log silent " Created ${SESSION_DIR}/services.map"
 # set up the lab console (console.nfr.lab)
 load_session_file "$CONF_DIR/rsyslog.conf"
 load_session_file "$CONF_DIR/dnsmasq.conf"
-load_session_file "$TARGET_DIR/launch_target.sh"
+
+cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
+chmod 755 "$SESSION_DIR/$TARGET_DIR/launch_target.sh"
+chmod 755 "$SESSION_DIR/$TARGET_DIR/services/service_emulator.sh"
 
 ######################################################################
 # if TLS is used
@@ -611,11 +616,12 @@ load_session_file "$TARGET_DIR/launch_target.sh"
   fi
 
 # Add the console to docker-compose
+name="console_$SESSION_ID"
 {
   svc_hostname="console.nfr.lab"
   echo "  console:"
   echo "    image: unspecific/victim-v1-tiny:1.0"
-  echo "    container_name: console_$SESSION_ID"
+  echo "    container_name: $name"
   echo "    hostname: console.nfr.lab"
   echo "    networks:"
   echo "      $NETWORK:"
@@ -636,11 +642,15 @@ load_session_file "$TARGET_DIR/launch_target.sh"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/dnsmasq.conf:/etc/dnsmasq.conf:ro"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/nfr.lab.zone:/etc/nfr.lab.zone:ro"
   echo "      - ${SESSION_DIR}/${LOG_DIR}/containers:/var/log/containers"
+  echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target"
   echo "    expose:"
   echo "      - \"514/udp\""
   echo "      - \"53/udp\""
+  echo "      - \"514/tcp\""
+  echo "      - \"53/tcp\""
   echo "    restart: unless-stopped"
 } >> "$SESSION_DIR/$COMPOSE_FILE"
+echo "$name" >> "$SESSION_DIR/services.map"
 
 # Loop through services
 declare -i lab_launch=0
@@ -714,6 +724,8 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
       echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
       echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.key:/etc/certs/$svc_hostname/$svc_hostname.key:ro"
     fi
+    echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target"
+
     echo "    logging:"
     echo "      driver: syslog"
     echo "      options:"
