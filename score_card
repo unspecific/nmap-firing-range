@@ -1,13 +1,5 @@
 # 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>
-#    Started on lheath-tp.concordservicing.com at 2025-04-22_21-46-54
-session=6da49cff
-# service=telnet target=192.168.13.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}
-# Valid services ftp ssh telnet http smb other
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
-hostname= service= target= port= proto= flag=
+#    Started on lheath-tp.concordservicing.com at 2025-04-25_21-47-24
+session=98451052
+# service=telnet target=192.168.253.153 port=5537 proto=tcp flag=FLAG{89ea16740}
 hostname= service= target= port= proto= flag=
