@@ -70,9 +70,11 @@ push:
 
 clean:
 	rm -f victim-v1-tiny-*.tar.gz victim-v1-large-*.tar.gz victim-v2-gui-*.tar.gz victim-v2-smgui-*.tar.gz
+	docker image prune
 
 clean-images:
 	docker rmi -f $(V1_TINY) $(V1_LARGE) $(V2_GUI) $(V2_SMGUI) || true
+	docker image prune
 
 clean-all: clean clean-images
 

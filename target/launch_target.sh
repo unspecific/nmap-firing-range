@@ -1,4 +1,6 @@
 #!/bin/bash
+logger "Launching launch_target on $HOSTNAME"
+logger $ENV
 
 VERSION=1.2
 
@@ -9,23 +11,20 @@ PORT="${TARGET_PORT:-default}"
 USERNAME="${TARGET_USER:-user}"
 PASSWORD="${TARGET_PASS:-pass}"
 
-echo "🏁 Launching target service: $SERVICE"
+logger "🏁 Launching target service: $SERVICE"
 export SERVICE FLAG PORT USERNAME PASSWORD
 
 trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
 
-add_user() {
-  setup-user -a -f "Victim $USERNAME" -g admin $USERNAME
-  # setup-user [-h] [-a] [-u] [-f FULLNAME] [-g GROUPS] [-k SSHKEY] [USERNAME]
-}
 
 launch_ssh() {
   echo "$FLAG" > /etc/motd
-  echo "root:$PASS" | chpasswd
-  service ssh start
-  tail -f /dev/null
+  setup-user -a -f "Victim $USERNAME" -g admin $USERNAME
+  echo "$USERNAME:$PASSWORD" | chpasswd
+  ssh-keygen -A
+  /usr/sbin/sshd -f /opt/target/.ssh/sshd_config -D
 }
 
 launch_smb() {

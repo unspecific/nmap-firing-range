@@ -76,7 +76,7 @@ create_service_cert() {
   local ip="$3"          # e.g. 192.168.200.101
   local out_dir="$ca_dir/$name"
   mkdir -p "$out_dir"
-  log console " 🛡  Generating new certificate for $name"
+  log console " 🛡  Generating new certificate for *****.nfr.lab"
 
   openssl genrsa -out "$out_dir/$name.key" 2048
 
@@ -106,7 +106,7 @@ EOF
     -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
     -out "$out_dir/$name.crt" \
     -days 365 -sha256 \
-    -extfile "$out_dir/$name.cnf" -extensions v3_req 
+    -extfile "$out_dir/$name.cnf" -extensions v3_req 2>/dev/null
 }
 #######################################################################
 
@@ -196,7 +196,7 @@ get_vpass() {
 
 get_vcommunity() {
   log silent "Grabbing a random victim snmp community"
-  local comm_file="$LAB_DIR/conf/vcommunities.conf"
+  local comm_file="$LAB_DIR/conf/communities.conf"
 
   if [[ ! -f "$comm_file" ]]; then
     echo "❌ Community file not found: $comm_file" >&2
@@ -325,6 +325,7 @@ load_emulated_services() {
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "Service" "Daemon" "Port" "Description"
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "───────" "─────────────" "──────────" "─────────────────────"
 
+
     # List full services
     for svc in $(printf "%s\n" "${!services[@]}"); do
       if [[ ! "$svc" =~ "-em"$ ]]; then
@@ -338,17 +339,11 @@ load_emulated_services() {
           port=$(cut -d':' -f2 <<< "$port_proto")
           tls=$(cut -d':' -f3 <<< "$port_proto")
           if [[ -n "$tls" ]]; then
-            services["${svc}-em"]="$proto:$port:tls"
+            printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS"
           else 
-            services["${svc}-em"]="$proto:$port"
+            printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
           fi
         done
-        if [[ -n "$tls" ]]; then
-          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
-        else 
-          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
-        fi
-
       fi
     done
 
@@ -375,7 +370,7 @@ load_emulated_services() {
         port=$(cut -d':' -f2 <<< "$port_proto")
         tls=$(cut -d':' -f3 <<< "$port_proto")
         if [[ -n "$tls" ]]; then
-          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS encryption"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS"
         else 
           printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
         fi
@@ -412,13 +407,13 @@ get_image_for_service() {
 declare -A services=(
   ["http"]="tcp:80 tcp:443:tls"
   ["ssh"]="tcp:22"
-  ["ftp"]="tcp:21"
+  ["ftp"]="tcp:21 tcp:990:tls"
   ["smb"]="tcp:139 tcp:445 udp:137 udp:138"
   ["tftp"]="udp:69"
   ["snmp"]="udp:161"
-  ["smtp"]="tcp:25 "
+  ["smtp"]="tcp:25 tcp:465:tls"
   ["imap"]="tcp:143 tcp:993:tls"
-  ["pop"]="tcp:110"
+  ["pop"]="tcp:110 tcp:995:tls"
 )
 
 # to make sure we have the same data as the emulated script, we are
@@ -621,8 +616,9 @@ load_session_file "$CONF_DIR/rsyslog.conf"
 load_session_file "$CONF_DIR/dnsmasq.conf"
 
 cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
-chmod 755 "$SESSION_DIR/$TARGET_DIR/launch_target.sh"
-chmod 755 "$SESSION_DIR/$TARGET_DIR/services/service_emulator_v2.sh"
+chmod -R 755 "$SESSION_DIR/$TARGET_DIR/" || echo "chmod of $SESSION_DIR/$TARGET_DIR/ failed" 
+touch $SYSLOG_FILE
+chmod 664 $SYSLOG_FILE || echo "can't chmod $SYSLOG_FILE"
 
 ######################################################################
 # if TLS is used
@@ -635,7 +631,7 @@ name="console_$SESSION_ID"
 {
   svc_hostname="console.nfr.lab"
   echo "  console:"
-  echo "    image: unspecific/victim-v1-tiny:1.0"
+  echo "    image: unspecific/victim-v1-tiny:1.3"
   echo "    container_name: $name"
   echo "    hostname: console.nfr.lab"
   echo "    networks:"
@@ -656,8 +652,8 @@ name="console_$SESSION_ID"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/rsyslog.conf:/etc/rsyslog.conf:ro"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/dnsmasq.conf:/etc/dnsmasq.conf:ro"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/nfr.lab.zone:/etc/nfr.lab.zone:ro"
-  echo "      - ${SESSION_DIR}/${LOG_DIR}/containers:/var/log/containers"
-  echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target"
+  echo "      - ${SYSLOG_FILE}:/var/log/containers:rw"
+  echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw"
   echo "    expose:"
   echo "      - \"514/udp\""
   echo "      - \"53/udp\""
@@ -705,7 +701,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   # we will generate a new username and password combination for each service.
   SESS_USER=$(get_vuser)
   SESS_PASS=$(get_vpass)
-  SESSION_COMMUNITY=$(get_vcommunity)
+  SESS_COMMUNITY=$(get_vcommunity)
 
   # Write to docker-compose.yml with proper indentation
   {
@@ -724,7 +720,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     done
     # Add environment variables.  Easier to pass all of them to ever servce and let the launch_target script figure it out
     echo "    environment:"
-    echo "      - HOSTNAME=$HOSTNAE"
+    echo "      - HOSTNAME=$HOSTNAME"
     echo "      - USERNAME=$SESS_USER"
     echo "      - PASSWORD=$SESS_PASS"
     echo "      - COMMUNITY=$SESS_COMMUNITY"
