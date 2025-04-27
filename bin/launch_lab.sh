@@ -419,7 +419,7 @@ declare -A services=(
 # to make sure we have the same data as the emulated script, we are
 # creating a meta_services array that will have the version, daemon, and description
 declare -A services_meta=(
-  ["http"]="2.0:TheWebServer:Web server running nginx"
+  ["http"]="2.0:mini_httpd:Web server running nginx"
   ["ssh"]="2.0:OpenSSHd:SSH server running openssh server"
   ["ftp"]="1.0:vsFTP:FTP server running vsftpd"
   ["smb"]="1.0:Samba:Samba+shares, brute force enabled"
