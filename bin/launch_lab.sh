@@ -297,19 +297,22 @@ load_emulated_services() {
     daemon=$(parse_meta_var "$script" "EM_DAEMON")
 
     if [[ -n "$port" ]]; then
+
       IFS=' ' read -ra ports <<< "${port}"
       for port_proto in "${ports[@]}"; do
         proto=$(cut -d':' -f1 <<< "$port_proto")
         port=$(cut -d':' -f2 <<< "$port_proto")
         tls=$(cut -d':' -f3 <<< "$port_proto")
         if [[ -n "$tls" ]]; then
-          services["${svc}-em"]="$proto:$port:tls"
+          tmp_port="$tmp_port $proto:$port:tls"
         else 
-          services["${svc}-em"]="$proto:$port"
+          tmp_port="$tmp_port $proto:$port"
         fi
       done
+      services["${svc}-em"]=$tmp_port
       SERVICE_LIST+=("$svc")
-      log silent "✔️  Loaded emulator: ${svc}-em on $port"
+      log silent "✔️  Loaded emulator: ${svc}-em on $tmp_port"
+      tmp_port=" "
     else
       log silent "⚠️  Skipping emulator: $svc (missing EM_PORT)"
     fi
@@ -391,6 +394,20 @@ parse_meta_var() {
   grep -E "^$var=" "$file" | cut -d= -f2- | cut -d"#" -f1 | sed 's/^ *//; s/ *$//;' | tr -d '"'
 }
 
+dump_services() {
+  for key in $(printf "%s\n" "${!services[@]}" | sort); do
+    echo "$key => ${services[$key]}"
+  done
+}
+
+check_service() {
+  local ckservice="$1"
+  local svcs="${services[$ckservice]}"
+
+  [[ -z "$svcs" ]] && { log console " ❌  Unable to support $ckservice at this time"; exit 1; }
+
+  log silent "Found Ports for $ckservice - $svcs"
+}
 
 get_image_for_service() {
   case $1 in
@@ -437,7 +454,7 @@ declare -A services_meta=(
 # Make sure we identify all the flags used.
 # remember process flow
 
-while getopts "ln:hdVi:tp" opt; do
+while getopts "ln:hdVi:tps:" opt; do
   case "$opt" in
     n)
       NUM_SERVICES="$OPTARG"
@@ -465,6 +482,8 @@ while getopts "ln:hdVi:tp" opt; do
       echo "  -l               List available services (both native and emulated)"
       echo "  -V               Show version and exit"
       echo "  -h               Show this help message"
+      echo "  -s               Service.  If you specify a service only one target is generated"
+      echo "                   Use -l to see the list of supported services."
       echo
       exit 0
       ;;
@@ -485,6 +504,9 @@ while getopts "ln:hdVi:tp" opt; do
       ;;
     t)
       sklp_tls=true
+      ;;
+    s) 
+      single_service="$OPTARG"
       ;;
     \?)
       echo "❌ Invalid option: -$OPTARG" >&2
@@ -548,6 +570,19 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+
+# If it is a single service, lets deal with that
+if [[ -n "$single_service" ]]; then
+  log console " 🚨  Single Service Option - Running $single_service"
+  check_service "$single_service"
+
+  services=(
+    ["$single_service"]="${services[$single_service]}"
+  )
+  
+  log silent "Single Service setup $single_service ${services[$single_service]}"
+  NUM_SERVICES=1
+fi
 
 # Otherwise it's time to build the lab
 
@@ -669,18 +704,18 @@ svc_count=1
 log silent "Time to prepare the victims"
 for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   ((lab_launch++))
-  log silent "Initialize the service setup"
+  log silent "Initialize the $svc service setup"
+  log silent "$svc uses ${services[$svc]}"
   rand_ip=$(get_random_ip)
   svc_hostname=$(get_unique_hostname)
   echo "$rand_ip    $svc_hostname" >> "$ZONEFILE"
   echo "$svc,$svc_hostname" >> "$SESSION_DIR/hostnames.map"
-######################################################################
-# if TLS is used
+  ######################################################################
+  # if TLS is used
   if [[ "$skip_tls" != "true" ]]; then
     create_service_cert "$CA_DIR" "$svc_hostname" "$rand_ip"
   fi
-#
-######################################################################
+  ######################################################################
   flag=$(generate_flag)
   name="${svc}_host_${SESSION_ID}"
   image=$(get_image_for_service "$svc")

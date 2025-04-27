@@ -2,7 +2,7 @@
 EXE=$@
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="8080 8443:tls"               # The port this service listens on
+EM_PORT="tcp:8080 tcp:8443:tls"               # The port this service listens on
 EM_VERSION="1.5"               # Optional version identifier
 EM_DESC="HTTP REST API, fake flags"  # Short description for listing output
 EM_DAEMON="FakeAPI"
