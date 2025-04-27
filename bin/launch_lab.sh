@@ -45,7 +45,7 @@ log() {
   log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP_SHORT v$VERSION] $message"
 
   if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
-    echo "$message"
+    echo "$message" >&2
   fi
   if [[ -f $LOGFILE ]]; then
     echo "$log" >> "$LOGFILE"
@@ -173,7 +173,7 @@ get_vuser() {
   local user_file="$LAB_DIR/conf/vusers.conf"
 
   if [[ ! -f "$user_file" ]]; then
-    echo "❌ User file not found: $user_file" >&2
+    log console " ❌  User file not found: $user_file" >&2
     return 1
   fi
 
@@ -269,11 +269,19 @@ get_random_ip() {
 
 load_session_file() {
   local sess_file="$1"
+  local replace="$2"
   log silent "Loading $sess_file into $LABDIR"
+  local path=$(dirname "$SESSION_DIR/$sess_file")
   if [[ -f "$LAB_DIR/$sess_file" ]]; then
-    cp "$LAB_DIR/$sess_file" "$SESSION_DIR/$sess_file" || log console "❌ Can't copy $sess_file to session Continuing..."
+    mkdir -p "$path"
+    if [[ "$replace" == "CONSOLE" ]]; then
+      local update=$(sed "s/%CONSOLE%/$SUBNET.2/" "$LAB_DIR/$sess_file")
+      echo "$update" > "$SESSION_DIR/$sess_file"  || echo "FAIL" 
+    else 
+      cp "$LAB_DIR/$sess_file" "$SESSION_DIR/$sess_file" || log console "❌ Can't copy $LAB_DIR/$sess_file to session Continuing..."
+    fi
   else 
-    echo "❌ Missing core config file for console server. $sess_file Please reinstall or update"
+    echo "❌ Missing core config file for console server. $LAB_DIR/$sess_file Please reinstall or update"
     exit 1
   fi
 }
@@ -304,9 +312,9 @@ load_emulated_services() {
         port=$(cut -d':' -f2 <<< "$port_proto")
         tls=$(cut -d':' -f3 <<< "$port_proto")
         if [[ -n "$tls" ]]; then
-          tmp_port="$tmp_port $proto:$port:tls"
+          tmp_port="$proto:$port:tls $tmp_port"
         else 
-          tmp_port="$tmp_port $proto:$port"
+          tmp_port="$proto:$port $tmp_port"
         fi
       done
       services["${svc}-em"]=$tmp_port
@@ -436,7 +444,7 @@ declare -A services=(
 # to make sure we have the same data as the emulated script, we are
 # creating a meta_services array that will have the version, daemon, and description
 declare -A services_meta=(
-  ["http"]="2.0:mini_httpd:Web server running nginx"
+  ["http"]="2.0:thttpd:Web server running nginx"
   ["ssh"]="2.0:OpenSSHd:SSH server running openssh server"
   ["ftp"]="1.0:vsFTP:FTP server running vsftpd"
   ["smb"]="1.0:Samba:Samba+shares, brute force enabled"
@@ -589,7 +597,7 @@ fi
 LOGFILE="$SESSION_DIR/lab.log"
 COMPOSE_FILE="docker-compose.yml"
 SCORE_CARD="score_card"
-HOSTNAME=$(hostname)
+SERVERNAME=$(hostname)
 NETWORK=range-$SESSION_ID
 NUM_SERVICES="${NUM_SERVICES:-5}"
 CA_DIR="$SESSION_DIR/${CONF_DIR}/${CERT_DIR}"
@@ -615,7 +623,7 @@ log console " 🚀  Launching random lab at $SESSION_TIME"
 log console " 🆔  SESSION_ID $SESSION_ID"
 {
   echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" 
-  echo "#    Started on $HOSTNAME at $SESSION_TIME"
+  echo "#    Started on $SERVERNAME at $SESSION_TIME"
   echo "session=$SESSION_ID"
   echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740}"
 } > "$SCORE_CARD"
@@ -646,14 +654,15 @@ log silent " Created docker-compose.yaml - ${SESSION_DIR}/${COMPOSE_FILE}"
 } >> "$SESSION_DIR/services.map"
 log silent " Created ${SESSION_DIR}/services.map"
 
-# set up the lab console (console.nfr.lab)
-load_session_file "$CONF_DIR/rsyslog.conf"
-load_session_file "$CONF_DIR/dnsmasq.conf"
-
+# set up the session specific files and folders
 cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
 chmod -R 755 "$SESSION_DIR/$TARGET_DIR/" || echo "chmod of $SESSION_DIR/$TARGET_DIR/ failed" 
 touch $SYSLOG_FILE
 chmod 664 $SYSLOG_FILE || echo "can't chmod $SYSLOG_FILE"
+
+load_session_file "$CONF_DIR/rsyslog.conf"
+load_session_file "$CONF_DIR/dnsmasq.conf"
+load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" CONSOLE
 
 ######################################################################
 # if TLS is used
@@ -668,7 +677,7 @@ name="console_$SESSION_ID"
   echo "  console:"
   echo "    image: unspecific/victim-v1-tiny:1.3"
   echo "    container_name: $name"
-  echo "    hostname: console.nfr.lab"
+  echo "    hostname: $svc_hostname"
   echo "    networks:"
   echo "      $NETWORK:"
   echo "        ipv4_address: $SUBNET.2"
@@ -737,6 +746,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   SESS_USER=$(get_vuser)
   SESS_PASS=$(get_vpass)
   SESS_COMMUNITY=$(get_vcommunity)
+  svcs="${services[$svc]}"
 
   # Write to docker-compose.yml with proper indentation
   {
@@ -755,13 +765,14 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     done
     # Add environment variables.  Easier to pass all of them to ever servce and let the launch_target script figure it out
     echo "    environment:"
-    echo "      - HOSTNAME=$HOSTNAME"
+    echo "      - SESSION_ID=$SESSION_ID"
+    echo "      - HOSTNAME=$svc_hostname"
     echo "      - USERNAME=$SESS_USER"
     echo "      - PASSWORD=$SESS_PASS"
     echo "      - COMMUNITY=$SESS_COMMUNITY"
     echo "      - FLAG=$flag"
     echo "      - SERVICE=$svc"
-    echo "      - PORTS=$ports"
+    echo "      - PORTS=$svcs"
     if [[ "$skip_tls" != "true" ]]; then
       echo "      - SSL_CERT_PATH=/etc/certs/$svc_hostname/$svc_hostname.crt"
       echo "      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key"

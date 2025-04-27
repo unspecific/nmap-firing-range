@@ -1,6 +1,7 @@
 #!/bin/bash
 logger "Launching launch_target on $HOSTNAME"
-logger $ENV
+echo "------------- New host $HOSTNMAE" >> /opt/target/ENV
+env >> /opt/target/ENV
 
 VERSION=1.2
 
@@ -17,7 +18,6 @@ export SERVICE FLAG PORT USERNAME PASSWORD
 trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
-
 
 launch_ssh() {
   echo "$FLAG" > /etc/motd
