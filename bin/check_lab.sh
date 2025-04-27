@@ -33,7 +33,7 @@ fi
 SESSION_ID=$(grep -m 1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2)
 
 if [[ -z "$SESSION_ID" ]]; then
-  echo "❌ No session ID found in submission file."
+  echo "❌   No session ID found in submission file."
   exit 1
 fi
 
@@ -44,7 +44,7 @@ SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
 GROUND_TRUTH="$SESSION_DIR/mapping.txt"
 
 if [[ ! -f "$GROUND_TRUTH" ]]; then
-  echo "❌ Ground truth file not found: $GROUND_TRUTH"
+  echo "❌  Ground truth file not found: $GROUND_TRUTH"
   exit 1
 fi
 echo "✅ SESSION_ID: $SESSION_ID - Scoring session started"

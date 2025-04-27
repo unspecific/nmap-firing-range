@@ -616,7 +616,11 @@ log silent "Initiated a new session directory $SESSION_DIR"
 
 #initiate the zone file
 echo "$SUBNET.254     host.nfr.lab" >> "$ZONEFILE"
+reversed_ip=$(echo "$SUBNET.254" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
+echp "ptr-record=${reversed_ip}.in-addr.arpa,host.nfr.lab" >> "$ZONEFILE"
 echo "$SUBNET.2     console.nfr.lab" >> "$ZONEFILE"
+reversed_ip=$(echo "$SUBNET.2" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
+echp "ptr-record=${reversed_ip}.in-addr.arpa,console.nfr.lab" >> "$ZONEFILE"
 
 log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 log console " 🚀  Launching random lab at $SESSION_TIME"
@@ -718,6 +722,9 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   rand_ip=$(get_random_ip)
   svc_hostname=$(get_unique_hostname)
   echo "$rand_ip    $svc_hostname" >> "$ZONEFILE"
+  reversed_ip=$(echo "$rand_ip" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
+  ech "ptr-record=${reversed_ip}.in-addr.arpa,$svc_hostname" >> "$ZONEFILE"
+
   echo "$svc,$svc_hostname" >> "$SESSION_DIR/hostnames.map"
   ######################################################################
   # if TLS is used
