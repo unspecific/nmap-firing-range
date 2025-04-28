@@ -101,7 +101,7 @@ EOF
     -out "$out_dir/$name.csr" \
     -config "$out_dir/$name.cnf" 
 
-  openssl x509 -noout -req \
+  openssl x509 -req \
     -in "$out_dir/$name.csr" \
     -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
     -out "$out_dir/$name.crt" \
@@ -168,9 +168,10 @@ generate_flag() {
   echo "FLAG{$(openssl rand -hex 8)}"
 }
 
+# Get the Victim User
 get_vuser() {
   log silent "Grabbing a random victim user"
-  local user_file="$LAB_DIR/conf/vusers.conf"
+  local user_file="$LAB_DIR/conf/dicts/vusers.conf"
 
   if [[ ! -f "$user_file" ]]; then
     log console " ❌  User file not found: $user_file" >&2
@@ -181,9 +182,10 @@ get_vuser() {
   shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$user_file")
 }
 
+# Get the Victim Password
 get_vpass() {
   log silent "Grabbing a random victim password"
-  local pass_file="$LAB_DIR/conf/vpasswds.conf"
+  local pass_file="$LAB_DIR/conf/dicts/vpasswds.conf"
 
   if [[ ! -f "$pass_file" ]]; then
     echo "❌ Password file not found: $pass_file" >&2
@@ -196,7 +198,7 @@ get_vpass() {
 
 get_vcommunity() {
   log silent "Grabbing a random victim snmp community"
-  local comm_file="$LAB_DIR/conf/communities.conf"
+  local comm_file="$LAB_DIR/conf/dicts/communities.conf"
 
   if [[ ! -f "$comm_file" ]]; then
     echo "❌ Community file not found: $comm_file" >&2
@@ -208,7 +210,7 @@ get_vcommunity() {
 }
 
 get_unique_hostname() {
-  local conf_file="$LAB_DIR/conf/hostname.conf"
+  local conf_file="$LAB_DIR/conf/dicts/hostname.conf"
   [[ -f "$conf_file" ]] || {
     echo "❌ Hostname config not found: $conf_file" >&2
     return 1
@@ -663,9 +665,13 @@ cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
 chmod -R 755 "$SESSION_DIR/$TARGET_DIR/" || echo "chmod of $SESSION_DIR/$TARGET_DIR/ failed" 
 touch $SYSLOG_FILE
 chmod 664 $SYSLOG_FILE || echo "can't chmod $SYSLOG_FILE"
+touch "$SESSION_DIR/$TARGET_DIR/score.json"
+chmod 664 "$SESSION_DIR/$TARGET_DIR/score.json" || echo "can't chmod $SESSION_DIR/$TARGET_DIR/score.json"
+touch "$SESSION_DIR/$LOG_DIR/tcpdump"
+chmod 664 "$SESSION_DIR/$LOG_DIR/tcpdump" || echo "can't chmod $SESSION_DIR/$LOG_DIR/tcpdump"
 
-load_session_file "$CONF_DIR/rsyslog.conf"
-load_session_file "$CONF_DIR/dnsmasq.conf"
+load_session_file "$CONF_DIR/console/rsyslog.conf"
+load_session_file "$CONF_DIR/console/dnsmasq.conf"
 load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" CONSOLE
 
 ######################################################################
@@ -685,8 +691,10 @@ name="console_$SESSION_ID"
   echo "    networks:"
   echo "      $NETWORK:"
   echo "        ipv4_address: $SUBNET.2"
-  echo "    command: sh -c \"rsyslogd && dnsmasq -k\""
   echo "    environment:"
+  echo "      - SESSION_ID=$SESSION_ID"
+  echo "      - HOSTNAME=$svc_hostname"
+  echo "      - SERVICE=console"
   if [[ "$skip_tls" != "true" ]]; then
     echo "      - SSL_CERT_PATH=/etc/certs/$svc_hostname/$svc_hostname.crt"
     echo "      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key"
@@ -697,16 +705,24 @@ name="console_$SESSION_ID"
     echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
     echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.key:/etc/certs/$svc_hostname/$svc_hostname.key:ro"
   fi
-  echo "      - ${SESSION_DIR}/${CONF_DIR}/rsyslog.conf:/etc/rsyslog.conf:ro"
-  echo "      - ${SESSION_DIR}/${CONF_DIR}/dnsmasq.conf:/etc/dnsmasq.conf:ro"
+  echo "      - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro"
+  echo "      - ${SESSION_DIR}/${CONF_DIR}/console//dnsmasq.conf:/etc/dnsmasq.conf:ro"
   echo "      - ${SESSION_DIR}/${CONF_DIR}/nfr.lab.zone:/etc/nfr.lab.zone:ro"
+  echo "      - ${SESSION_DIR}/score_card:/etc/score_card:rw"
+  echo "      - ${SESSION_DIR}/mapping.txt:/etc/mapping.txt:rw"
+  echo "      - ${SESSION_DIR}/${TARGET_DIR}/score.json:/etc/score.json:rw"
   echo "      - ${SYSLOG_FILE}:/var/log/containers:rw"
+  echo "      - ${SESSION_DIR}/{$LOG_DIR}/tcpdump:/var/log/tcpdump:rw"
   echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw"
+  echo "      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro"
   echo "    expose:"
   echo "      - \"514/udp\""
   echo "      - \"53/udp\""
   echo "      - \"514/tcp\""
   echo "      - \"53/tcp\""
+  echo "      - \"80/tcp\""
+  echo "      - \"443/tcp\""
+  echo "    command: sh -c \"/opt/target/launch_target.sh; /bin/bash\""
   echo "    restart: unless-stopped"
 } >> "$SESSION_DIR/$COMPOSE_FILE"
 echo "$name" >> "$SESSION_DIR/services.map"
@@ -723,7 +739,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   svc_hostname=$(get_unique_hostname)
   echo "$rand_ip    $svc_hostname" >> "$ZONEFILE"
   reversed_ip=$(echo "$rand_ip" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
-  ech "ptr-record=${reversed_ip}.in-addr.arpa,$svc_hostname" >> "$ZONEFILE"
+  echo "ptr-record=${reversed_ip}.in-addr.arpa,$svc_hostname" >> "$ZONEFILE"
 
   echo "$svc,$svc_hostname" >> "$SESSION_DIR/hostnames.map"
   ######################################################################
@@ -785,6 +801,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
       echo "      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key"
     fi
     # now ot add te volumes
+    echo "    command: sh -c \"/opt/target/launch_target.sh; /bin/bash\""
     echo "    volumes:"
     if [[ "$skip_tls" != "true" ]]; then
       echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
@@ -831,7 +848,7 @@ log silent " Finished Creaeting ${SESSION_DIR}/${COMPOSE_FILE} "
 
 REAL_USER="${SUDO_USER:-$USER}"
 chown "$REAL_USER:$REAL_USER" "$SCORE_CARD"
-
+cp "$SCORE_CARD" "${SESSION_DIR}/"
 
 if [[ $DO_NOT_RUN ]]; then
   log silent " 🏁 DO NOT RUN MODE"

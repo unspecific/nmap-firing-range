@@ -3,21 +3,30 @@ logger "Launching launch_target on $HOSTNAME"
 echo "------------- New host $HOSTNMAE" >> /opt/target/ENV
 env >> /opt/target/ENV
 
-VERSION=1.2
+VERSION=1.3
 
 # ─── Input Variables ───────────────────────────────────────────────────────────
-SERVICE="${TARGET_SERVICE}"
-FLAG="${TARGET_FLAG}"
-PORT="${TARGET_PORT:-default}"
-USERNAME="${TARGET_USER:-user}"
-PASSWORD="${TARGET_PASS:-pass}"
+SERVICE="${SERVICE}"
+FLAG="${FLAG}"
+PORT="${PORT:-default}"
+USERNAME="${USERNAME:-user}"
+PASSWORD="${PASSWORD:-pass}"
 
 logger "🏁 Launching target service: $SERVICE"
-export SERVICE FLAG PORT USERNAME PASSWORD
 
 trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
+
+launch_console(){
+  echo "Launching Console Apps"
+  tcpdump -i any -n > /var/log/tcpdump &
+  thttpd -dd /opt/web -c "/cgi-bin/*" -D & 
+  ncat --listen --ssl --ssl-cert $SSL_CERT_PATH --ssl-key $SSL_KEY_PATH --sh-exec "ncat 127.0.0.1 80" -k -p 443 &
+  rsyslogd
+  dnsmasq -k
+}
+
 
 launch_ssh() {
   echo "$FLAG" > /etc/motd
@@ -43,9 +52,10 @@ launch_tftp() {
 launch_emulator() {
   local proto="${SERVICE%-em}"
   if [[ -x /opt/target/service_emulator_v2.sh ]]; then
-    /opt/target/service_emulator_v2.sh "$proto" "$FLAG"
+    /opt/target/service_emulator_v2.sh "$proto" "$FLAG" &
+    sleep infinity
   else
-    echo "❌ Emulator script missing or not executable."
+    logger "❌ Emulator script missing or not executable."
     exit 1
   fi
 }
@@ -58,6 +68,7 @@ launch_generic() {
 # ─── Dispatcher ────────────────────────────────────────────────────────────────
 
 case "$SERVICE" in
+  console)  launch_console ;;
   ssh)      launch_ssh ;;
   smb)      launch_smb ;;
   tftp)     launch_tftp ;;
@@ -65,4 +76,4 @@ case "$SERVICE" in
   *)        launch_generic ;;
 esac
 
-bash
+sleep infinity
