@@ -168,12 +168,12 @@ install_from_github() {
   fi
   for script in "${SCRIPTS[@]}"; do
     if [[ -f "temp_firing_range/$script" ]]; then
-      cp "temp_firing_range/$script" .
+      cd "temp_firing_range/"
     else
       log console "⚠️  Missing expected script in repo: $script"
     fi
   done
-  rm -rf temp_firing_range
+  # rm -rf temp_firing_range
   log console "✅ Scripts downloaded and synced from GitHub."
   log console "♻️ relaunching setup_lab to mke sure it is the latest version."
 
