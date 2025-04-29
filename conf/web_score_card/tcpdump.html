@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Live Tcpdump Viewer</title>
+<style>
+body { font-family: monospace; background: #111; color: #0f0; padding: 1em; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #333; padding: 4px; text-align: center; }
+th { background: #222; }
+input, select { width: 90%; background: #222; color: #0f0; border: 1px solid #555; text-align: center; }
+tr:nth-child(even) { background: #222; }
+</style>
+</head>
+<body>
+
+<h1 style="text-align:center;">Live Tcpdump Viewer</h1>
+
+<div style="text-align:center;">
+Show last: 
+<select id="limit" onchange="setLimit()">
+  <option value="100" selected>100</option>
+  <option value="250">250</option>
+  <option value="500">500</option>
+  <option value="1000">1000</option>
+</select> entries
+</div>
+
+<table id="logtable">
+<thead>
+<tr>
+<th>Date/Time<br><input id="filter0" type="text" oninput="applyFilter()"></th>
+<th>Interface<br><input id="filter1" type="text" oninput="applyFilter()"></th>
+<th>Direction<br><input id="filter2" type="text" oninput="applyFilter()"></th>
+<th>IP Type<br><input id="filter3" type="text" oninput="applyFilter()"></th>
+<th>Source<br><input id="filter4" type="text" oninput="applyFilter()"></th>
+<th>Destination<br><input id="filter5" type="text" oninput="applyFilter()"></th>
+</tr>
+</thead>
+<tbody id="logbody">
+</tbody>
+</table>
+
+<script>
+var source = new EventSource("/cgi-bin/tcpdumpstream.cgi");
+var maxRows = 100;
+
+source.onmessage = function(event) {
+    var parts = event.data.split('|');
+    var table = document.getElementById("logbody");
+    var row = document.createElement("tr");
+    for (var i = 0; i < parts.length; i++) {
+        var cell = document.createElement("td");
+        cell.textContent = parts[i];
+        row.appendChild(cell);
+    }
+    table.appendChild(row);
+    while (table.rows.length > maxRows) {
+        table.deleteRow(0);
+    }
+    applyFilter();
+};
+
+function applyFilter() {
+    var filters = [];
+    for (var i = 0; i < 6; i++) {
+        filters[i] = document.getElementById("filter"+i).value.toLowerCase();
+    }
+    var table = document.getElementById("logbody");
+    for (var i = 0; i < table.rows.length; i++) {
+        var show = true;
+        for (var j = 0; j < 6; j++) {
+            if (filters[j] && table.rows[i].cells[j].textContent.toLowerCase().indexOf(filters[j]) === -1) {
+                show = false;
+                break;
+            }
+        }
+        table.rows[i].style.display = show ? "" : "none";
+    }
+}
+
+function setLimit() {
+    var sel = document.getElementById("limit");
+    maxRows = parseInt(sel.value);
+}
+</script>
+
+</body>
+</html>

@@ -75,9 +75,6 @@ check_dependencies() {
       exit 1
     fi
   done
-
-  # no GitHub auth required
-
   log silent "All dependencies satisfied."
 }
 
@@ -90,7 +87,7 @@ install_scripts() {
   log silent "Installing scripts to $BIN_DIR..."
 
   # Ask once if not using --force
-  if [[ "$*" != *"--force"* ]]; then
+  if [[ "$FORCE" != true ]]; then
     read -rp "🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
     if [[ ! "$confirm_all" =~ ^[Yy]$ ]]; then
       log silent "User declined to update scripts."
@@ -125,8 +122,8 @@ install_scripts() {
 }
 
 create_symlinks() {
-  if [[ "$*" == *"--force"* ]]; then
-    log console "⚙️  --force enabled: creating symlinks without prompt."
+  if [[ "$FORCE" == true ]]; then
+    log console "⚙️  CLI option to not prompt, creating symlinks without prompt."
     auto_link=true
   else
     read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
@@ -187,16 +184,19 @@ install_from_github() {
 
 install_conf_dir() {
   log console "📁 Installing conf directory..."
-  local target_dir="$CONF_DIR"
 
-  mkdir -p "$target_dir" || { log console "❌ Failed to create conf directory"; exit 1; }
+  mkdir -p "$CONF_DIR" || { log console "❌ Failed to create conf directory"; exit 1; }
 
-  cp -r ./conf/* "$target_dir/" || {
+  cp -r ./conf/* "$CONF_DIR/" || {
     log console "❌ Failed to copy configuration files"
     exit 1
   }
+  # log console "make sure the cgi scripts can run."
+  # log console "chmod 755 $CONF_DIR/web_score_card/cgi-bin/*.cgi"
+  # chmod 755 "$CONF_DIR/web_score_card/cgi-bin/*.cgi"
+  # /opt/firing-range/conf/web_score_card/cgi-bin
 
-  log console "✅ Configuration files installed to $target_dir"
+  log console "✅ Configuration files installed to $CONF_DIR"
 }
 
 # install the assets to build target containers
@@ -219,14 +219,9 @@ install_target_dir() {
 setup_group_access() {
   log console "👥 Configuring group access and permissions..."
 
-  # Force or unattended install? No prompt.
-  if [[ "$FORCE" == true || "$UNATTENDED" == true ]]; then
-    AUTO_CONFIRM=true
-  fi
-
-  if [[ "$AUTO_CONFIRM" != true ]]; then
+  if [[ "$FORCE" != true ]]; then
     read -rp "❓ Create a shared group '${NFR_GROUP}' for lab participants? (y/n): " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || {
+    [[ ! "$confirm" =~ ^[Yy]$ ]] || {
       log console "❌ Skipping group creation and access setup."
       return
     }
@@ -264,11 +259,16 @@ uninstall() {
 
   log console "🚨 Uninstalling Firing Range..."
   if [[ -d "$LOG_DIR" ]]; then
-    read -rp "💾 Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
+    if [[ "$FORCE" == true ]]; then
+      backup_logs="y"
+    else 
+      read -rp "💾 Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
+    fi
     if [[ "$backup_logs" =~ ^[Yy]$ ]]; then
       log silent "Backing up existing logs"
       BACKUP_FILE="/tmp/firing-range-logs-$(date +%Y%m%d%H%M%S).tar.gz"
       tar -czf "$BACKUP_FILE" -C "$LOG_DIR" . && echo "📦 Logs backed up to $BACKUP_FILE"
+      log console "Backup file created $BACKUP_FILE.  Be sure to move from /tmp/ otherwise they will be lost"
     fi
   else
     log silent "ℹ️  No log directory found. Skipping log backup."
@@ -308,7 +308,18 @@ elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-if [[ -d "$INSTALL_DIR" ]]; then
+log console "checking for CLI options"
+if [[ "${1:-}" == "--force" ]]; then
+  log silent "--force used, will not prompt"
+  FORCE=true
+else 
+  log silent "No --force"
+fi
+
+check_dependencies
+
+
+if [[ -d "$INSTALL_DIR" && "$FORCE" != true ]]; then
   echo " 🚧  Existing installation detected at $INSTALL_DIR."
   echo "     We can update the existing installation. Logs/sessions will not be touched"
   read -rp "Do you want to update the existing installation? (y/n): " response
@@ -327,16 +338,13 @@ mkdir -p "$LOG_DIR"
 log silent "$APP v$VERSION initializing..."
 log console "🚀 Starting $APP v$VERSION..."
 
-check_dependencies
-
 if [[ "$*" == *"--skip-update"* ]]; then
   github_choice="n"
-elif [[ "${1:-}" == "--no-prompt" ]]; then
+elif [[ "$FORCE" == "true" ]]; then
   github_choice="n"
 else
   read -rp "🌐 Do you want to download the latest version from GitHub? (y/n): " github_choice
 fi
-
 if [[ "$github_choice" =~ ^[Yy]$ ]]; then
   install_from_github "$@"
 else

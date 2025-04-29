@@ -7,7 +7,7 @@ LABEL description="Victim container for nmap firing range (tiny)"
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install services & tools
-RUN apk update && apk add --no-cache alpine-conf thttpd bash openssh-server net-snmp openldap samba samba-common-tools imap dnsmasq rsyslog nmap-ncat vsftpd tftp-hpa opensmtpd
+RUN apk update && apk add --no-cache alpine-conf logger tcpdump thttpd bash openssh-server net-snmp openldap samba samba-common-tools imap dnsmasq rsyslog nmap-ncat vsftpd tftp-hpa opensmtpd
 
 # Create directory for session-mounted volume
 RUN mkdir -p /opt/target /etc/ssh /var/log

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Log Viewer</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #0f0; margin: 0; padding: 1em; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+
+<h1>Live Log</h1>
+<pre id="log"></pre>
+
+<script>
+var source = new EventSource("/cgi-bin/logstream.cgi");
+
+source.onmessage = function(event) {
+    var log = document.getElementById("log");
+    log.textContent += event.data + "\n";
+    log.scrollTop = log.scrollHeight; // Auto scroll
+};
+
+source.onerror = function() {
+    source.close();
+};
+</script>
+
+</body>
+</html>

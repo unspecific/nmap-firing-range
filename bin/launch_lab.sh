@@ -388,7 +388,7 @@ load_emulated_services() {
           printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
         fi
       done
-    if [[ "$DEBUG" == "ture" ]]; then
+    if [[ "$DEBUG" == "true" ]]; then
        echo "⏩ ───────────────────────────────────────────────"
     fi
     done
@@ -419,10 +419,26 @@ check_service() {
   log silent "Found Ports for $ckservice - $svcs"
 }
 
+create_resolv(){
+  {
+    echo "nameserver ${SUBNET}.2"
+    echo "search lan nfr.lab"
+    echo "options ndots:0"
+  } >> "${SESSION_DIR}/${TARGET_DIR}/conf/resolv.conf"
+}
+
+add_hosts() {
+  local dns_host="$1"
+  local dns_ip="$2"
+  # let's make sure we don't have any other entries from previous labs
+  log console " 🌐 Adding host to /etc/host for easier access"
+  echo "$dns_ip\t$dns_host\t# $SESSION_ID" >> "/etc/hosts"
+}
+
 get_image_for_service() {
   case $1 in
-    *-em) echo "unspecific/victim-v1-tiny:1.3" ;;
-    *) echo "unspecific/victim-v1-tiny:1.3" ;;
+    *-em) echo "unspecific/victim-v1-tiny:1.4" ;;
+    *) echo "unspecific/victim-v1-tiny:1.4" ;;
   esac
 }
 
@@ -580,6 +596,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+echo "$SESSION_TIME Creating new session $SESSION_ID by $USER" >> "$LAB_DIR/logs/setup.log"
 
 # If it is a single service, lets deal with that
 if [[ -n "$single_service" ]]; then
@@ -608,9 +625,9 @@ ZONEFILE="$SESSION_DIR/$CONF_DIR/nfr.lab.zone"
 declare -A USED_HOSTNAMES=()
 
 # create lab session environment
-mkdir -p "$SESSION_DIR" "$CA_DIR" "$SESSION_DIR/$LOG_DIR"
+mkdir -p "$SESSION_DIR" "$CA_DIR" "$SESSION_DIR/$LOG_DIR/services"
 mkdir -p "$SESSION_DIR/$BIN_DIR" "$SESSION_DIR/$CONF_DIR"
-mkdir -p "$SESSION_DIR/$TARGET_DIR" "$SESSION_DIR/$TARGET_DIR/services"
+mkdir -p "$SESSION_DIR/$TARGET_DIR/services"
 echo "--------- NEW SESSION $SESSION_ID ------------------" > $LOGFILE || echo "cant create logfile"
 chgrp $NFR_GROUP $LOGFILE
 chmod 664 $LOGFILE
@@ -673,6 +690,8 @@ chmod 664 "$SESSION_DIR/$LOG_DIR/tcpdump" || echo "can't chmod $SESSION_DIR/$LOG
 load_session_file "$CONF_DIR/console/rsyslog.conf"
 load_session_file "$CONF_DIR/console/dnsmasq.conf"
 load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" CONSOLE
+create_resolv
+
 
 ######################################################################
 # if TLS is used
@@ -682,10 +701,11 @@ load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" CONSOLE
 
 # Add the console to docker-compose
 name="console_$SESSION_ID"
+add_hosts "console.nfr.lab" "$SUBNET.2"
 {
   svc_hostname="console.nfr.lab"
   echo "  console:"
-  echo "    image: unspecific/victim-v1-tiny:1.3"
+  echo "    image: unspecific/victim-v1-tiny:1.4"
   echo "    container_name: $name"
   echo "    hostname: $svc_hostname"
   echo "    networks:"
@@ -712,7 +732,7 @@ name="console_$SESSION_ID"
   echo "      - ${SESSION_DIR}/mapping.txt:/etc/mapping.txt:rw"
   echo "      - ${SESSION_DIR}/${TARGET_DIR}/score.json:/etc/score.json:rw"
   echo "      - ${SYSLOG_FILE}:/var/log/containers:rw"
-  echo "      - ${SESSION_DIR}/{$LOG_DIR}/tcpdump:/var/log/tcpdump:rw"
+  echo "      - ${SESSION_DIR}/${LOG_DIR}/tcpdump:/var/log/tcpdump:rw"
   echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw"
   echo "      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro"
   echo "    expose:"
@@ -726,6 +746,8 @@ name="console_$SESSION_ID"
   echo "    restart: unless-stopped"
 } >> "$SESSION_DIR/$COMPOSE_FILE"
 echo "$name" >> "$SESSION_DIR/services.map"
+# add console.nfr.lab to local /etc/hosts to reach it by name.
+HOSTS="/etc/hosts"
 
 # Loop through services
 declare -i lab_launch=0
@@ -807,8 +829,9 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
       echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
       echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.key:/etc/certs/$svc_hostname/$svc_hostname.key:ro"
     fi
-    echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target"
-
+    echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:ro"
+    echo "      - ${SESSION_DIR}/${TARGET_DIR}/conf/resolv.conf:/etc/resolv.conf"
+    echo "      - ${SESSION_DIR}/${LOG_DIR}/services:/var/log/services:rw"
     echo "    logging:"
     echo "      driver: syslog"
     echo "      options:"
@@ -864,7 +887,7 @@ fi
 
 # Launch the containers using docker-compose
 docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d
-
+echo "labuser:labuser" | chpasswd &&
 # Log running containers
 log silent "✅ Final container map:"
 DOCKER_PS=$(docker ps --format "table {{.Names}}\t{{.Ports}}")

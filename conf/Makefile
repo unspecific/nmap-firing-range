@@ -1,5 +1,5 @@
 # ───── Image Tags ─────
-V1_TINY=unspecific/victim-v1-tiny:1.3
+V1_TINY=unspecific/victim-v1-tiny:1.4
 V1_LARGE=unspecific/victim-v1-large:1.01
 V2_SMGUI=unspecific/victim-v2-smgui:1.2
 V2_GUI=unspecific/victim-v2-gui:1.01

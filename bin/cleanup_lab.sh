@@ -10,11 +10,6 @@ VERSION="2.0"
 LAB_DIR="/opt/firing-range"
 LOG_DIR="logs"
 BIN_DIR="bin"
-TELNET_DIR="telnet_flag"
-SMB_DIR="smb_flag"
-NC_DIR="nc_flag"
-FTP_DIR="ftp_flag"
-WEB_DIR="web_flag"
 SECONDS=0
 
 # -- Validate input file --
@@ -98,6 +93,10 @@ docker network rm $NETWORK &>/dev/null || echo " ⚠️  Network $NETWORK verifi
 
 echo " ✅ ScoreCard being backed up."
 cp -a "$SUBMISSION_FILE" "$SESSION_DIR/score_card"
+
+echo " ✅ Cleaning up the HOSTS file."
+new_hosts=$(grep -v "$SESSION_ID" "/etc/hosts")
+echo $new_hosts > "/etc/hosts"
 
 echo " ✅ Lab environment cleanup complete."
 echo
