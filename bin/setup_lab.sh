@@ -1,81 +1,137 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# setup_lab.sh - Installer for the Nmap Firing Range Pentest Lab
 
-# setup_lab.sh - Installer for the Firing Range Pentest Lab
+set -euo pipefail -o errtrace
+trap 'cleanup; exit 1' ERR
 
 APP="NFR-SetupLab"
-VERSION=2.0
+VERSION="2.2"
 
-
-set -euo pipefail
-
-# Ensure the script is run as root or with sudo
+# ─── Elevate to root if needed ────────────────────────────────────────
 if [[ "$EUID" -ne 0 ]]; then
   echo "🔒 Root access required. Re-running with sudo..."
   exec sudo "$0" "$@"
 fi
 
-# Let's introduce ourselves
 echo
 echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+echo
 
-### CONFIG ###
+# ─── Locate this script & repo root ──────────────────────────────────
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"    # e.g. …/nmap-firing-range/bin
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"                      # e.g. …/nmap-firing-range
+
+# ─── Installation directories ────────────────────────────────────────
 INSTALL_DIR="/opt/firing-range"
 BIN_DIR="$INSTALL_DIR/bin"
 CONF_DIR="$INSTALL_DIR/conf"
 TARGET_DIR="$INSTALL_DIR/target"
 LOG_DIR="$INSTALL_DIR/logs"
 LOGFILE="$LOG_DIR/setup.log"
-SCRIPTS=("launch_lab.sh" "cleanup_lab.sh" "check_lab.sh" "setup_lab.sh")
-ROLLBACK_FILE="$LOG_DIR/installed_files.txt"
-NFR_GROUP="nfrlab"
-FORCE=${FORCE:-false}
-UNATTENDED=${UNATTENDED:-false}
-AUTO_CONFIRM=${AUTO_CONFIRM:-false}
+ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
+INSTALL_DIR_OVERRIDE=false
 
+# ─── Defaults & flags ───────────────────────────────────────────────
+FORCE=false
+UNINSTALL=false
+UPGRADE=false
+AUTO_CONFIRM=${AUTO_CONFIRM:-false}
+UNATTENDED=${UNATTENDED:-false}
 DEBUG=${DEBUG:-false}
+
+NFR_GROUP="nfrlab"
+REPO_URL="https://github.com/unspecific/nmap-firing-range.git"
+
+# ─── Dependency lists ────────────────────────────────────────────────
+DEPS=( bash git mktemp cp rm mv mkdir rmdir chmod chown find sort getent groupadd usermod id grep sudo )
+LAB_DEPS=( docker grep shuf tee realpath openssl )
+SCRIPTS=( launch_lab.sh cleanup_lab.sh check_lab.sh setup_lab.sh )
+
+# ─── Rollback tracking ───────────────────────────────────────────────
+TMP_ROLLBACK="$(mktemp)"
+record() { echo "$1" >>"$TMP_ROLLBACK"; }
+
 
 ### FUNCTIONS ###
 log() {
-  local mode="$1"
-  shift
-  local message=$*
-  local log
-  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP v$VERSION] $message"
+  local mode="$1"; shift
+  local message="$*"
+  local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
+  local entry="$timestamp [$APP v$VERSION] $message"
 
+  # always echo to console if asked
   if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
     echo "$message"
   fi
-  echo "$log" >> "$LOGFILE"
+
+  # ensure the log directory exists
+  local logdir
+  logdir="$(dirname "$LOGFILE")"
+  mkdir -p "$logdir"
+
+  # ensure the logfile itself exists (so that >> won’t fail on some filesystems)
+  touch "$LOGFILE"
+
+  echo "$entry" >> "$LOGFILE"
 }
 
+# ─── Help text ────────────────────────────────────────────────────────
 show_help() {
-  echo "Firing Range Setup Script"
-  echo "Usage: $0 [OPTIONS]"
-  echo
-  echo "Options:"
-  echo "  --help, -h         Show this help message and exit"
-  echo "  --uninstall        Uninstall all installed components and optionally backup logs"
-  echo "  --no-prompt        Skip GitHub update prompt and use local scripts"
-  echo "  --skip-update      Internal flag to avoid update loop after pulling latest scripts"
-  echo "  --force            Overwrite all existing scripts without prompting"
-  echo
-  echo "This script installs or updates the Firing Range lab to /opt/firing-range,"
-  echo "ensures all dependencies are met, installs shell scripts, creates symlinks,"
-  echo "and can pull the latest scripts from GitHub."
-  echo
+  cat <<EOF
+Firing Range Setup Script
+Usage: $0 [OPTIONS]
+
+Options:
+  --help, -h            Show this help message and exit
+  --uninstall           Uninstall all components and optionally backup logs
+  --unattended          Run with no prompts (overwrite defaults)
+  --upgrade             Download and install the latest scripts from GitHub
+  --force               Overwrite all existing files without prompting
+  --install-dir, --prefix DIR
+                        Install into DIR instead of the default ($INSTALL_DIR)
+
+This script installs or upgrades the Firing Range lab, verifies dependencies,
+installs shell scripts, sets up permissions, and can pull the latest version
+of the scripts from GitHub.
+EOF
   exit 0
 }
 
 check_dependencies() {
-  log silent "Checking required dependencies..."
-  local deps=(docker git curl)
-  for dep in "${deps[@]}"; do
-    if ! command -v "$dep" &>/dev/null; then
-      log console "❌ Missing dependency: $dep"
-      exit 1
+  local missing=()
+  for cmd in "${DEPS[@]}"; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing+=( "$cmd" )
     fi
   done
-  log silent "All dependencies satisfied."
+  if (( ${#missing[@]} )); then
+    echo "❌   Missing installer dependencies: ${missing[*]}"
+    exit 1
+  fi
+}
+
+check_lab_dependencies() {
+  local missing=()
+
+  # check normal binaries
+  for cmd in "${LAB_DEPS[@]}"; do
+    if ! command -v "$cmd" &>/dev/null; then
+      missing+=( "$cmd" )
+    fi
+  done
+
+  # check for docker-compose *or* docker compose plugin
+  if ! command -v docker-compose &>/dev/null; then
+    if ! docker compose version &>/dev/null; then
+      missing+=( "docker-compose (or 'docker compose')" )
+    fi
+  fi
+
+  if (( ${#missing[@]} )); then
+    echo "❌ Missing lab-runtime dependencies: ${missing[*]}"
+    exit 1
+  fi
 }
 
 create_directories() {
@@ -86,160 +142,224 @@ create_directories() {
 install_scripts() {
   log silent "Installing scripts to $BIN_DIR..."
 
-  # Ask once if not using --force
-  if [[ "$FORCE" != true ]]; then
+  # start fresh rollback list
+  : > "$TMP_ROLLBACK"
+
+  # Prompt once unless forced or unattended
+  if [[ "$FORCE" != true && "$UNATTENDED" != true ]]; then
     read -rp "🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
     if [[ ! "$confirm_all" =~ ^[Yy]$ ]]; then
       log silent "User declined to update scripts."
       return
     fi
+  else
+    log silent "🛠️  Unattended/forced: updating scripts without prompt."
   fi
 
-  for script in "${SCRIPTS[@]}"; do
-    script="bin/${script}"
-    if [[ -f "$script" ]]; then
-      if [[ "$PWD$script" -ef "$BIN_DIR/$script" ]]; then
-        log console "⚠️  '$script' already exists. Overwriting."
-      fi
-      cp -f "$script" "$BIN_DIR/"
-      echo "$BIN_DIR/$script" >> "$ROLLBACK_FILE"
-    else
-      log console "⚠️  Skipping missing script: $script"
+  mkdir -p "$BIN_DIR"
+
+  for script_name in "${SCRIPTS[@]}"; do
+    src="$SCRIPT_DIR/$script_name"
+    dest="$BIN_DIR/$script_name"
+
+    if [[ ! -f "$src" ]]; then
+      log console "⚠️  Skipping missing script: $script_name"
+      continue
     fi
+
+    record "$dest"
+    [[ -f "$dest" ]] && log console "⚠️  '$script_name' exists—overwriting."
+    cp -f "$src" "$dest" || { log console "❌ Failed to copy $script_name"; exit 1; }
   done
 
-  log silent "Making scripts executable"
-  chmod +x "$BIN_DIR"/*.sh
+  log silent "Making scripts executable..."
+  for script_name in "${SCRIPTS[@]}"; do
+    dest="$BIN_DIR/$script_name"
+    [[ -f "$dest" ]] && chmod +x "$dest" && record "$dest"
+  done
 
-  for script in "${SCRIPTS[@]}"; do
-    if [[ ! -x "$BIN_DIR/$script" ]]; then
-      log console "❌ Script $script was not copied or is not executable."
+  # ——— HERE’S THE FIX ———
+  # Deduplicate *the temp file* you’ve been writing to, not the missing permanent one
+  sort -u -o "$TMP_ROLLBACK" "$TMP_ROLLBACK"
+
+  # verify
+  for script_name in "${SCRIPTS[@]}"; do
+    dest="$BIN_DIR/$script_name"
+    if [[ ! -x "$dest" ]]; then
+      log console "❌  Script $script_name missing or not executable."
       exit 1
     fi
   done
 
-  log silent "Scripts installed and made executable."
+  log silent "Scripts installed and executable."
 }
+
 
 create_symlinks() {
-  if [[ "$FORCE" == true ]]; then
-    log console "⚙️  CLI option to not prompt, creating symlinks without prompt."
+  local auto_link=false
+  # decide if we prompt
+  if [[ "$FORCE" == true || "$UNATTENDED" == true ]]; then
     auto_link=true
   else
-    read -rp "🛠️  Do you want to install launchers into your \$PATH? (y/n): " answer
-    if [[ "$answer" =~ ^[Yy]$ ]]; then
-      auto_link=true
-    else
-      log silent "User chose not to create symlinks."
-      return
-    fi
+    read -rp "🛠️  Install launchers into your \$PATH? (y/n): " answer
+    [[ "$answer" =~ ^[Yy]$ ]] && auto_link=true || return
   fi
 
-  if [[ "$auto_link" == true ]]; then
-    for path_dir in ${PATH//:/ }; do
-      if [[ -w "$path_dir" ]]; then
-        log silent "Using $path_dir for symlinks."
-        for script in "$BIN_DIR"/*.sh; do
-          base_name=$(basename "$script" .sh)
-          target="$path_dir/$base_name"
+  local created_any=false
+  IFS=: read -ra path_dirs <<< "$PATH"
+  for path_dir in "${path_dirs[@]}"; do
+    [[ -w "$path_dir" ]] || continue
+    log silent "Using $path_dir for symlinks."
 
-          if [[ -L "$target" || -e "$target" ]]; then
-            log console "⚠️  Skipping $target — already exists."
-            continue
-          fi
+    for script in "$BIN_DIR"/*.sh; do
+      local base_name target existing
+      base_name=$(basename "$script" .sh)
+      target="$path_dir/$base_name"
 
-          ln -s "$script" "$target"
-          echo "$target" >> "$ROLLBACK_FILE"
-          log console "🔗 Linked $base_name to $target"
-        done
-        return
+      if [[ -L "$target" ]]; then
+        existing=$(readlink "$target")
+        if [[ "$existing" != "$script" ]]; then
+          log console "🔄 Updating symlink $target → $script"
+          ln -sf "$script" "$target"
+          record "$target"
+          created_any=true
+        else
+          log silent "✅ $base_name already up-to-date."
+        fi
+
+      elif [[ -e "$target" ]]; then
+        log console "⚠️  Skipping $target — exists and is not a symlink."
+
+      else
+        ln -s "$script" "$target"
+        log console "🔗 Linked $base_name → $target"
+        record "$target"
+        created_any=true
       fi
     done
-    log console "❌ No writable directory found in \$PATH. Skipping symlink creation."
-  fi
+
+    # if we did anything here, stop; otherwise try next dir
+    $created_any && return
+    log console "⚠️  Nothing to do in $path_dir, trying next."
+  done
+
+  log console "❌ No writable \$PATH entry found or all links up-to-date; skipping."
 }
 
-
+# ─── This would be an Update routine ─────────────────────────────────
 install_from_github() {
-  log console "🔄 Downloading latest scripts from GitHub..."
-  if ! git clone --depth=1 https://github.com/unspecific/nmap-firing-range.git temp_firing_range; then
-    log console "❌ Failed to clone from GitHub. Check your internet connection."
+  clone_dir=$(mktemp -d -t nfr-XXXX)
+  log console "🔄 Cloning into $clone_dir…"
+  git clone --depth=1 "$REPO_URL" "$clone_dir" || {
+    log console "❌ Git clone failed"; exit 1
+  }
+  log console "♻️ Relaunching installer from fresh clone…"
+  exec "$clone_dir/setup_lab.sh" --skip-update "$@"
+}
+
+# ─── Rollback on error only ───────────────────────────────────────────
+cleanup() {
+  local exit_code=$?
+  # only perform rollback if we errored *and* there’s something to roll back
+  if (( exit_code != 0 )) && [[ -s "$TMP_ROLLBACK" ]]; then
+    log console "⚠️  Failure detected (exit $exit_code), rolling back…"
+    # remove in reverse order
+    tac "$TMP_ROLLBACK" | while read -r path; do
+      log console "🗑  Removing $path"
+      rm -rf "$path" || log console "❌ Could not remove $path"
+    done
+    # also clean up any temp clone
+    if [[ -n "${clone_dir:-}" && -d "$clone_dir" ]]; then
+      log console "🗑  Removing temp clone $clone_dir"
+      rm -rf "$clone_dir"
+    fi
+  fi
+
+  # always clean up our rollback file
+  rm -f "$TMP_ROLLBACK"
+}
+
+# trigger cleanup on script exit (both errors and normal), 
+# but the function itself only rolls back on error
+trap cleanup EXIT
+
+# ─── Installing the CONF_DIR to LAB_DIR ─────────────────────────────────
+install_conf() {
+  log console "📁 Installing conf directory…"
+
+  local src_dir="$REPO_ROOT/conf"
+  if [[ ! -d "$src_dir" ]]; then
+    log console "❌ Missing source conf directory at $src_dir"
     exit 1
   fi
-  for script in "${SCRIPTS[@]}"; do
-    if [[ -f "temp_firing_range/$script" ]]; then
-      cd "temp_firing_range/"
-    else
-      log console "⚠️  Missing expected script in repo: $script"
-    fi
-  done
-  # rm -rf temp_firing_range
-  log console "✅ Scripts downloaded and synced from GitHub."
-  log console "♻️ relaunching setup_lab to mke sure it is the latest version."
 
-  if [[ -f "setup_lab.sh" ]]; then
-    exec ./setup_lab.sh --skip-update "$@"
-  fi
-}
+  mkdir -p "$CONF_DIR"
+  record "$CONF_DIR"                       # so we can remove it on rollback
 
-install_conf_dir() {
-  log console "📁 Installing conf directory..."
-
-  mkdir -p "$CONF_DIR" || { log console "❌ Failed to create conf directory"; exit 1; }
-
-  cp -r ./conf/* "$CONF_DIR/" || {
+  cp -r "$src_dir/"* "$CONF_DIR/" || {
     log console "❌ Failed to copy configuration files"
     exit 1
   }
-  # log console "make sure the cgi scripts can run."
-  # log console "chmod 755 $CONF_DIR/web_score_card/cgi-bin/*.cgi"
-  # chmod 755 "$CONF_DIR/web_score_card/cgi-bin/*.cgi"
-  # /opt/firing-range/conf/web_score_card/cgi-bin
 
   log console "✅ Configuration files installed to $CONF_DIR"
 }
 
-# install the assets to build target containers
-install_target_dir() {
-  log console "📁 Installing target directory..."
+# ─── Installing the TARGET_DIR to LAB_DIR ─────────────────────────────────
+install_target() {
+  log console "📁 Installing target directory…"
 
-  mkdir -p "$TARGET_DIR" || {
-    log console "❌ Failed to create target directory"
+  local src_dir="$REPO_ROOT/target"
+  if [[ ! -d "$src_dir" ]]; then
+    log console "❌ Missing source target directory at $src_dir"
     exit 1
-  }
+  fi
 
-  cp -r ./target/* "$TARGET_DIR/" || {
-    log console "❌ Failed to copy target service files"
+  mkdir -p "$TARGET_DIR"
+  record "$TARGET_DIR"                     # so we can remove it on rollback
+
+  cp -r "$src_dir/"* "$TARGET_DIR/" || {
+    log console "❌ Failed to copy target services"
     exit 1
   }
 
   log console "✅ Target services installed to $TARGET_DIR"
 }
 
+# ─── Creating the NFR_GROUP and preparing LABDIR ──────────────────────────
 setup_group_access() {
-  log console "👥 Configuring group access and permissions..."
+  log console "👥 Configuring group access and permissions…"
 
-  if [[ "$FORCE" != true ]]; then
+  # determine whether to prompt or auto-confirm
+  local confirm
+  if [[ "$FORCE" == true || "$UNATTENDED" == true ]]; then
+    confirm="Y"
+    log silent "🛠️  ${UNATTENDED:+Unattended/}${FORCE:+Forced}: auto-confirming group creation."
+  else
     read -rp "❓ Create a shared group '${NFR_GROUP}' for lab participants? (y/n): " confirm
-    [[ ! "$confirm" =~ ^[Yy]$ ]] || {
-      log console "❌ Skipping group creation and access setup."
-      return
-    }
   fi
 
-  if ! getent group $NFR_GROUP > /dev/null; then
+  # skip if the user explicitly said no
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    log console "❌ Skipping group creation and access setup."
+    return
+  fi
+
+  # create the group if it doesn't exist
+  if ! getent group "$NFR_GROUP" >/dev/null; then
     log console "📦 Creating group '${NFR_GROUP}'..."
-    groupadd $NFR_GROUP
+    groupadd "$NFR_GROUP"
   else
     log console "ℹ️ Group '${NFR_GROUP}' already exists."
   fi
 
+  # set ownership and permissions
   log console "🔧 Setting permissions for $INSTALL_DIR..."
   chown -R root:"$NFR_GROUP" "$INSTALL_DIR"
-  find "$INSTALL_DIR" -type d -exec chmod 755 {} +
-  find "$INSTALL_DIR" -type f -exec chmod 644 {} +
-  find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 755 {} +
+  find "$INSTALL_DIR" -type d -exec chmod 775 {} +
+  find "$INSTALL_DIR" -type f -exec chmod 664 {} +
+  find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 775 {} +
 
+  # add the real user to the group if not already a member
   local real_user="${SUDO_USER:-$USER}"
   if id -nG "$real_user" | grep -qw "$NFR_GROUP"; then
     log console "✅ User '$real_user' is already a member of '${NFR_GROUP}'."
@@ -250,8 +370,54 @@ setup_group_access() {
   fi
 }
 
+# ─── Where is it?  WHERE IS IT?!? ─────────────────────────────────
+determine_install_dir() {
+  # 1) Default install-dir exists?
+  if [[ -d "$INSTALL_DIR" ]]; then
+    return
+  fi
+
+  # 2) If user explicitly overrode INSTALL_DIR, trust it (even if it doesn't exist yet)
+  if [[ "${INSTALL_DIR_OVERRIDE:-false}" == true ]]; then
+    return
+  fi
+
+  # 3) Prompt for the real install directory
+  read -rp "❓ Install not found at $INSTALL_DIR. Enter install directory to remove (or leave blank to auto-detect project folder): " resp
+  if [[ -n "$resp" ]]; then
+    INSTALL_DIR="$resp"
+    return
+  fi
+
+  # 4) Fallback: detect if we're in the source tree (./setup_lab.sh or cd bin/ && ./setup_lab.sh)
+  local invoked_dir parent
+  invoked_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  parent="$(dirname "$invoked_dir")"
+  if [[ -d "$parent/bin" && -d "$parent/conf" && -d "$parent/target" ]]; then
+    INSTALL_DIR="$parent"
+    log console "ℹ️  No install at default; assuming project root = $INSTALL_DIR"
+    return
+  fi
+
+  echo "❌ Could not locate an installation directory."
+  exit 1
+}
+
+
+# ─── Kill it all, Burn it to the ground ─────────────────────────────────
 uninstall() {
-  LOGFILE="nfr_uninstall.log"
+  determine_install_dir
+
+  # recalc paths based on the resolved INSTALL_DIR
+  BIN_DIR="$INSTALL_DIR/bin"
+  CONF_DIR="$INSTALL_DIR/conf"
+  TARGET_DIR="$INSTALL_DIR/target"
+  LOG_DIR="$INSTALL_DIR/logs"
+  LOGFILE="$LOG_DIR/setup.log"
+  ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
+
+  log console "🗑  Uninstalling Firing Range from $INSTALL_DIR…"
+  
   if [[ ! -d "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
     log console "❌ No installation detected in $INSTALL_DIR. Nothing to uninstall."
     exit 1
@@ -273,7 +439,6 @@ uninstall() {
   else
     log silent "ℹ️  No log directory found. Skipping log backup."
   fi
-
 
   if [[ -f "$ROLLBACK_FILE" ]]; then
     while read -r line; do
@@ -299,35 +464,100 @@ uninstall() {
   exit 0
 }
 
+# ─── Where can we install from ─────────────────────────────────
+check_local() {
+  for s in "${SCRIPTS[@]}"; do
+    # look for it in CWD or in bin/
+    if [[ -f "$s" || -f "bin/$s" ]]; then
+      continue
+    else
+      return 1
+    fi
+  done
+  return 0
+}
+
 ### MAIN ###
-if [[ "${1:-}" == "--uninstall" ]]; then
+
+# ─── Parse flags ─────────────────────────────────────────────────────
+while (( $# )); do
+  case "$1" in
+    --install-dir|--prefix)
+      INSTALL_DIR="$2"
+      INSTALL_DIR_OVERRIDE=true
+      shift 2
+      ;;
+    --help|-h)        show_help ;;
+    --uninstall)      UNINSTALL=true; shift ;;
+    --unattended)     UNATTENDED=true; shift ;;
+    --upgrade)        UPGRADE=true;    shift ;;
+    --force)          FORCE=true;      shift ;;
+    *)                break           ;;
+  esac
+done
+
+# ─── Re-calc dependent paths only if INSTALL_DIR was overridden ─────
+if [[ "$INSTALL_DIR_OVERRIDE" == true ]]; then
+  BIN_DIR="$INSTALL_DIR/bin"
+  CONF_DIR="$INSTALL_DIR/conf"
+  TARGET_DIR="$INSTALL_DIR/target"
+  LOG_DIR="$INSTALL_DIR/logs"
+  LOGFILE="$LOG_DIR/setup.log"
+  ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
+fi
+
+# ─── One-off commands ────────────────────────────────────────────────
+if [[ "$UNINSTALL" == true ]]; then
   uninstall
   exit 0
-elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  show_help
+elif [[ "$UPGRADE" == true ]]; then
+  log console "🔄 Upgrade requested: pulling from GitHub…"
+  install_from_github "$@"
   exit 0
 fi
 
-log console "checking for CLI options"
-if [[ "${1:-}" == "--force" ]]; then
-  log silent "--force used, will not prompt"
-  FORCE=true
-else 
-  log silent "No --force"
-fi
-
+# ─── Dependency checks ───────────────────────────────────────────────
 check_dependencies
+check_lab_dependencies
 
-
+# ─── Detect existing install & scripts ───────────────────────────────
 if [[ -d "$INSTALL_DIR" && "$FORCE" != true ]]; then
-  echo " 🚧  Existing installation detected at $INSTALL_DIR."
-  echo "     We can update the existing installation. Logs/sessions will not be touched"
-  read -rp "Do you want to update the existing installation? (y/n): " response
-  if [[ ! "$response" =~ ^[Yy]$ ]]; then
-    echo " ❌  Installation aborted."
-    exit 1
+
+  if check_local; then
+    echo " 🚧  Complete installation detected at $INSTALL_DIR."
+    echo "     You can update without touching logs or sessions."
+
+    if [[ "$UNATTENDED" == true ]]; then
+      echo " ✅  Unattended mode: automatically updating."
+    else
+      read -rp "Do you want to update the existing installation? (y/n): " response
+      if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        echo " ❌  Installation aborted."
+        exit 1
+      fi
+    fi
+
+  else
+    echo " ⚠️  Partial or broken install detected at $INSTALL_DIR (missing scripts)."
+    echo "     Some of your bin/ scripts aren’t present."
+
+    if [[ "$UNATTENDED" == true ]]; then
+      echo " ✅  Unattended mode: forcing fresh install from GitHub."
+      FORCE=true
+    else
+      read -rp "Do you want to force a fresh install from GitHub? (y/n): " response
+      if [[ "$response" =~ ^[Yy]$ ]]; then
+        FORCE=true
+      else
+        echo " ❌  Installation aborted."
+        exit 1
+      fi
+    fi
+
   fi
+
 fi
+
 
 if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
   echo "⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
@@ -338,23 +568,56 @@ mkdir -p "$LOG_DIR"
 log silent "$APP v$VERSION initializing..."
 log console "🚀 Starting $APP v$VERSION..."
 
+# ─── Local vs. GitHub install/update logic ────────────────────────
 if [[ "$*" == *"--skip-update"* ]]; then
-  github_choice="n"
-elif [[ "$FORCE" == "true" ]]; then
-  github_choice="n"
-else
-  read -rp "🌐 Do you want to download the latest version from GitHub? (y/n): " github_choice
-fi
-if [[ "$github_choice" =~ ^[Yy]$ ]]; then
+  # explicit “no more pulls”—must have a local copy
+  if check_local; then
+    log console "📁 --skip-update: using local scripts"
+  else
+    log console "❌ --skip-update requested but no local scripts found."
+    exit 1
+  fi
+
+elif [[ "$FORCE" == true ]]; then
+  # forced pull (or fresh install) with no prompts
+  log console "🔄 --force: downloading latest from GitHub (no prompt)…"
   install_from_github "$@"
+
+elif [[ "$UNATTENDED" == true ]]; then
+  # completely non-interactive mode:
+  if check_local; then
+    log console "📁 --unattended: installing from local scripts"
+  else
+    log console "🔄 --unattended: no local copy, pulling from GitHub"
+    install_from_github "$@"
+  fi
+
+elif check_local; then
+  # interactive local vs update choice
+  read -rp "📁 Local scripts detected. [I]nstall local or [U]pdate from GitHub? (i/u): " choice
+  if [[ "$choice" =~ ^[Uu]$ ]]; then
+    log console "🔄 Updating from GitHub…"
+    install_from_github "$@"
+  else
+    log console "✅ Installing from local copy."
+  fi
+
 else
-  log console "📁 Using scripts in current local directory."
+  # interactive fresh pull
+  read -rp "📡 No local scripts found. Download from GitHub? (y/n): " github_choice
+  if [[ "$github_choice" =~ ^[Yy]$ ]]; then
+    install_from_github "$@"
+  else
+    log console "❌ Nothing to install. Exiting."
+    exit 1
+  fi
 fi
+
 
 create_directories "$@"
 install_scripts "$@"
-install_conf_dir
-install_target_dir
+install_conf
+install_target
 setup_group_access
 create_symlinks "$@"
 
