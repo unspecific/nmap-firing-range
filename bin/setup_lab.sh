@@ -36,6 +36,7 @@ INSTALL_DIR_OVERRIDE=false
 FORCE=false
 UNINSTALL=false
 UPGRADE=false
+NO_GRP=false
 AUTO_CONFIRM=${AUTO_CONFIRM:-false}
 UNATTENDED=${UNATTENDED:-false}
 DEBUG=${DEBUG:-false}
@@ -348,6 +349,7 @@ setup_group_access() {
   if ! getent group "$NFR_GROUP" >/dev/null; then
     log console "📦 Creating group '${NFR_GROUP}'..."
     groupadd "$NFR_GROUP"
+    NO_GRP=false
   else
     log console "ℹ️ Group '${NFR_GROUP}' already exists."
   fi
@@ -357,7 +359,7 @@ setup_group_access() {
   if [[ $NO_GRP != "true" ]]; then
     chown -R root:"$NFR_GROUP" "$INSTALL_DIR"
   else 
-    chown -R root:nobody "$INSTALL_DIR"
+    chown -R root:nogroup "$INSTALL_DIR"
   fi
   find "$INSTALL_DIR" -type d -exec chmod 775 {} +
   find "$INSTALL_DIR" -type f -exec chmod 664 {} +
@@ -432,16 +434,16 @@ uninstall() {
     if [[ "$FORCE" == true ]]; then
       backup_logs="y"
     else 
-      read -rp "💾 Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
+      read -rp " 💾  Do you want to back up the session logs before uninstalling? (y/n): " backup_logs
     fi
     if [[ "$backup_logs" =~ ^[Yy]$ ]]; then
       log silent "Backing up existing logs"
       BACKUP_FILE="/tmp/firing-range-logs-$(date +%Y%m%d%H%M%S).tar.gz"
       tar -czf "$BACKUP_FILE" -C "$LOG_DIR" . && echo "📦 Logs backed up to $BACKUP_FILE"
-      log console "Backup file created $BACKUP_FILE.  Be sure to move from /tmp/ otherwise they will be lost"
+      log console " 💾  Backup file created $BACKUP_FILE.\r\nBe sure to move from /tmp/ otherwise they will be lost"
     fi
   else
-    log silent "ℹ️  No log directory found. Skipping log backup."
+    log silent " ℹ️  No log directory found. Skipping log backup."
   fi
 
   if [[ -f "$ROLLBACK_FILE" ]]; then
@@ -469,17 +471,40 @@ uninstall() {
 }
 
 # ─── Where can we install from ─────────────────────────────────
+# $1 = mode: “installed” or “staged”
+# $2 = optional dir–falls back to global INSTALL_DIR
 check_local() {
-  for s in "${SCRIPTS[@]}"; do
-    # look for it in CWD or in bin/
-    if [[ -f "$s" || -f "bin/$s" ]]; then
-      continue
-    else
+  local mode="$1"
+  local dir
+  if [[ "$mode" == "staged" ]]; then
+    dir="$(pwd)"
+  else
+    dir="${2:-$INSTALL_DIR}"
+  fi
+
+  case "$mode" in
+    installed)
+      # Installed if key dirs, setup script, and at least one target subdir exist
+      [[ -d "$dir/bin" && -d "$dir/conf" && -d "$dir/target" ]] || return 1
+      [[ -x "$dir/bin/setup_lab.sh" ]] || return 1
+      # ensure either target/conf or target/services exists
+      ([[ -d "$dir/target/conf" ]] || [[ -d "$dir/target/services" ]])
+      ;;
+    staged)
+      # Staged if all scripts in SCRIPTS array are present and executable
+      for script in "${SCRIPTS[@]}"; do
+        if [[ ! -x "$dir/bin/$script" ]]; then
+          return 1
+        fi
+      done
+      ;;
+    *)
+      log console "❌  check_local: unknown mode '$mode'" >&2
       return 1
-    fi
-  done
-  return 0
+      ;;
+  esac
 }
+
 
 ### MAIN ###
 
@@ -518,11 +543,11 @@ if [[ "$INSTALL_DIR_OVERRIDE" == true ]]; then
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
 fi
 
-if getent group "$GROUP" >/dev/null 2>&1; then
-  log console " ✅  Group ‘$GROUP’ exists."
+if getent group "$NFR_GROUP" >/dev/null 2>&1; then
+  log console " ✅  Group ‘$NFR_GROUP’ exists."
 else
-  log console " ❌  Group ‘$GROUP’ does not exist."
-  log console " Please make sure nmap firing randge is properly installed."
+  log console " ❌  Group ‘$NFR_GROUP’ does not exist."
+  log console " Please make sure nmap firing range is properly installed."
   NO_GRP=true
 fi
 
@@ -540,45 +565,6 @@ fi
 check_dependencies
 check_lab_dependencies
 
-# ─── Detect existing install & scripts ───────────────────────────────
-if [[ -d "$INSTALL_DIR" && "$FORCE" != true ]]; then
-
-  if check_local; then
-    echo " 🚧  Complete installation detected at $INSTALL_DIR."
-    echo "     You can update without touching logs or sessions."
-
-    if [[ "$UNATTENDED" == true ]]; then
-      echo " ✅  Unattended mode: automatically updating."
-    else
-      read -rp "Do you want to update the existing installation? (y/n): " response
-      if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo " ❌  Installation aborted."
-        exit 1
-      fi
-    fi
-
-  else
-    echo " ⚠️  Partial or broken install detected at $INSTALL_DIR (missing scripts)."
-    echo "     Some of your bin/ scripts aren’t present."
-
-    if [[ "$UNATTENDED" == true ]]; then
-      echo " ✅  Unattended mode: forcing fresh install from GitHub."
-      FORCE=true
-    else
-      read -rp "Do you want to force a fresh install from GitHub? (y/n): " response
-      if [[ "$response" =~ ^[Yy]$ ]]; then
-        FORCE=true
-      else
-        echo " ❌  Installation aborted."
-        exit 1
-      fi
-    fi
-
-  fi
-
-fi
-
-
 if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
   echo "⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
   exit 1
@@ -588,51 +574,82 @@ mkdir -p "$LOG_DIR"
 log silent "$APP v$VERSION initializing..."
 log console "🚀 Starting $APP v$VERSION..."
 
-# ─── Local vs. GitHub install/update logic ────────────────────────
-if [[ "$*" == *"--skip-update"* ]]; then
-  # explicit “no more pulls”—must have a local copy
-  if check_local; then
-    log console "📁 --skip-update: using local scripts"
+
+# ─── Detect existing install & scripts ───────────────────────────────
+# ─── Installation Decision Logic ─────────────────────────────────────────
+INSTALL_MODE=""
+
+# 1) Existing installation? Prompt to update
+log console "  Checking for existing installation in $INSTALL_DIR"
+if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
+  log console " 🚧  Installation found at $INSTALL_DIR."
+  if [[ "$UNATTENDED" == true ]]; then
+    INSTALL_MODE="update"
+    log console " ✅  Unattended mode: updating installation."
   else
-    log console "❌ --skip-update requested but no local scripts found."
-    exit 1
+    read -rp "Update existing installation? (y/n): " resp
+    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="update" || log console " ⚠️  Skipping update."
   fi
+fi
 
-elif [[ "$FORCE" == true ]]; then
-  # forced pull (or fresh install) with no prompts
-  log console "🔄 --force: downloading latest from GitHub (no prompt)…"
-  install_from_github "$@"
-
-elif [[ "$UNATTENDED" == true ]]; then
-  # completely non-interactive mode:
-  if check_local; then
-    log console "📁 --unattended: installing from local scripts"
+# 2) Local staging install? If not updating, check for local scripts
+log console "  Checking for install files $(pwd)"
+if [[ -z "$INSTALL_MODE" ]] && check_local staged; then
+  log console " 🚧  Found staged files to install."
+  if [[ "$UNATTENDED" == true ]]; then
+    INSTALL_MODE="local"
+    log console " 📁  Unattended mode: installing from local scripts."
   else
-    log console "🔄 --unattended: no local copy, pulling from GitHub"
-    install_from_github "$@"
+    read -rp "Local scripts detected. Install from local directory? (y/n): " resp
+    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="local"
   fi
+fi
 
-elif check_local; then
-  # interactive local vs update choice
-  read -rp "📁 Local scripts detected. [I]nstall local or [U]pdate from GitHub? (i/u): " choice
-  if [[ "$choice" =~ ^[Uu]$ ]]; then
-    log console "🔄 Updating from GitHub…"
-    install_from_github "$@"
+# 3) Flags override
+[[ "$*" == *"--force"* ]] && INSTALL_MODE="github" && log console "🔄 --force: will fetch from GitHub."
+[[ "$*" == *"--skip-update"* ]] && INSTALL_MODE="local" && log console "📁 --skip-update: forcing local install."
+
+# 4) Unattended fallback
+if [[ -z "$INSTALL_MODE" ]] && [[ "$UNATTENDED" == true ]]; then
+  if check_local staged; then
+    INSTALL_MODE="local"
+    log console "📁 --unattended: installing from local scripts."
   else
-    log console "✅ Installing from local copy."
+    INSTALL_MODE="github"
+    log console " 🌐  Unattended mode: no local scripts → fetching from GitHub."
   fi
+fi
 
-else
-  # interactive fresh pull
-  read -rp "📡 No local scripts found. Download from GitHub? (y/n): " github_choice
-  if [[ "$github_choice" =~ ^[Yy]$ ]]; then
-    install_from_github "$@"
+# 5) Interactive GitHub prompt if still unset
+if [[ -z "$INSTALL_MODE" ]]; then
+  read -rp "No install mode selected. Fetch from GitHub? (y/n): " resp
+  if [[ "$resp" =~ ^[Yy]$ ]]; then
+    INSTALL_MODE="github"
   else
-    log console "❌ Nothing to install. Exiting."
+    log console "❌ Installation aborted."
     exit 1
   fi
 fi
 
+# 6) Execute mode
+case "$INSTALL_MODE" in
+  update)
+    log console "🔄 Updating existing installation..."
+    # update logic here
+    ;;
+  local)
+    log console "🚀 Installing from local scripts..."
+    # local install logic here
+    ;;
+  github)
+    log console "🌐 Fetching and installing from GitHub..."
+    install_from_github "$@"
+    ;;
+  *)
+    log console "❌ No install mode selected; exiting."
+    exit 1
+    ;;
+esac
 
 create_directories "$@"
 install_scripts "$@"

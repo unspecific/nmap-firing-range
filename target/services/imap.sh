@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="143 993:tls"               # The port this service listens on
+EM_PORT="tcp:143 tcp:993:tls"               # The port this service listens on
 EM_VERSION="8.12"               # Optional version identifier
 EM_DESC="IMAP4 emulator, brute force enabled"  # Short description for listing output
 EM_DAEMON="FakeIMAPd"

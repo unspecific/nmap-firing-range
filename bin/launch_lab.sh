@@ -20,7 +20,7 @@ INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
 ### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
 APP_SHORT="NFR Launcher"
-VERSION="2.0"
+VERSION="2.2.01"
 
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
@@ -90,6 +90,7 @@ create_service_cert() {
   local name="$2"        # might be "stealthy-kernel.nfr.lab"
   local ip="$3"          # e.g. "192.168.155.168"
 
+  log console " 🔐  Generating TLS certificate"
   # ─── Normalize the base name ───────────────────────────────────────────────
   # strip any trailing ".nfr.lab"
   local base_name="${name%${DOMAIN}}"
@@ -173,13 +174,38 @@ check_dependencies() {
     missing=1
   fi
 
-  # 3) Alpine base image (pull if absent)
-  if ! docker image inspect alpine:latest >/dev/null 2>&1; then
-    log console " ℹ️   Alpine image not found. Pulling it now..."
-    if docker pull alpine:latest; then
-      log console " ✅  Pulled Alpine image."
+  # Determine the Docker image (default placeholder 'any')
+  image=$(get_image_for_service "any")
+
+  # Derive archive name by stripping tag and path
+  image_base="${image%%:*}"
+  archive_name="$(basename "$image_base")"
+
+  tgz_file="$LAB_DIR/conf/${archive_name}.tgz"
+
+  # If image not present, optionally prompt user before loading
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    # In interactive mode, ask permission to load
+    if [[ "$UNATTENDED" != true ]]; then
+      read -rp "Docker image '$image' not found locally. Load from archive '$tgz_file'? (y/n): " load_resp
+      if [[ ! "$load_resp" =~ ^[Yy]$ ]]; then
+        log console "❌ User chose not to load '$image'."
+        missing=1
+        return
+      fi
+    fi
+
+    # Proceed to load image from archive
+    log console "ℹ️   Loading Docker image '$image' from $tgz_file..."
+    if [[ -f "$tgz_file" ]]; then
+      if docker load -i "$tgz_file"; then
+        log console "✅  Successfully loaded '$image' from $tgz_file."
+      else
+        log console "❌  Failed to load '$image' from $tgz_file."
+        missing=1
+      fi
     else
-      log console " ❌  Failed to pull Alpine image."
+      log console "❌  Archive '$tgz_file' not found; cannot load '$image'."
       missing=1
     fi
   fi
@@ -227,7 +253,8 @@ generate_flag() {
   fi
 
   flag="FLAG{$rand}"
-  log console " 🔑 Generated flag${service:+ for $service}"
+  log console " 🔑 Generated flag"
+  log silent " Generated FLAG: $flag for $service"
   echo "$flag"
 }
 
@@ -444,14 +471,11 @@ load_emulated_services() {
       tmp_port=""
       IFS=' ' read -ra ports <<<"$port_meta"
       for port_proto in "${ports[@]}"; do
-        proto=${port_proto%%:*}
-        rest=${port_proto#*:}
-        port_num=${rest%%:*}
-        tls_flag=${rest#*:}
-        if [[ "$tls_flag" != "$rest" ]]; then
-          tmp_port+="$proto:$port_num:tls "
+        read -r proto port tls <<< "$(awk -F ':' '{print $1, $2, $3}' <<< "$port_proto")"
+        if [[ "$tls" ]]; then
+          tmp_port+="$proto:$port:tls "
         else
-          tmp_port+="$proto:$port_num "
+          tmp_port+="$proto:$port "
         fi
       done
       tmp_port=${tmp_port%% }  # trim trailing space
@@ -628,8 +652,8 @@ get_image_for_service() {
   # Defaults, override via env:
   local em_prefix="${EMULATOR_IMAGE_PREFIX:-unspecific/victim-v1-tiny}"
   local em_tag="${EMULATOR_IMAGE_TAG:-1.4}"
-  local real_prefix="${SERVICE_IMAGE_PREFIX:-unspecific/victim-v1-large}"
-  local real_tag="${SERVICE_IMAGE_TAG:-1.0}"
+  local real_prefix="${SERVICE_IMAGE_PREFIX:-unspecific/victim-v1-tiny}"
+  local real_tag="${SERVICE_IMAGE_TAG:-1.4}"
 
   local image
   case "$svc" in
@@ -1101,16 +1125,9 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   # 4) Record to score_card (one line per port)
   IFS=' ' read -ra ports <<<"${services[$svc]}"
   for port_proto in "${ports[@]}"; do
-    proto=${port_proto%%:*}
-    port=${port_proto#*:}
+    read -r proto port tls <<< "$(awk -F ':' '{print $1, $2, $3}' <<< "$port_proto")"
     echo "hostname= service= target= port= proto= flag=" \
       >> "$SESSION_DIR/$SCORE_CARD"
-  done
-
-  # 5) Record to mapping.txt
-  for port_proto in "${ports[@]}"; do
-    proto=${port_proto%%:*}
-    port=${port_proto#*:}
     echo "$svc: Hostname=$svc_hostname IP=$rand_ip Port=$port Proto=$proto Flag=$flag" \
       >> "$mapping_file"
   done
@@ -1135,8 +1152,7 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     expose:
 EOF
   for port_proto in "${ports[@]}"; do
-    proto=${port_proto%%:*}
-    port=${port_proto#*:}
+    read -r proto port tls <<< "$(awk -F ':' '{print $1, $2, $3}' <<< "$port_proto")"
     echo "      - \"$port/$proto\"" >> "$compose_file"
   done
 
