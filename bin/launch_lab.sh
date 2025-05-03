@@ -4,13 +4,18 @@ if [[ "$*" =~ (^| )-V($| ) || "$*" =~ (^| )-l($| ) || "$*" =~ (^| )-h($| ) ]]; t
 fi
 # If it's not root, sudo
 if [[ $EUID -ne 0 && "$SKIP_SUDO" != "true" ]]; then
-  echo "🔒 Root access required. Re-running with sudo..."
+  echo " 🔒 Root access required. Re-running with sudo..."
   if [[ "$DEBUG" == "true" ]]; then
     echo "Relaunching in DEBUG mode..."
     exec sudo DEBUG=true "$0" "$@"
   fi 
   exec sudo "$0" "$@"
 fi
+
+## CONFIG (static, independent of session) ###
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
 
 ### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
@@ -26,7 +31,8 @@ NCPORT=$(shuf -i1024-4999 -n1)
 NCPORTTLS=$(shuf -i5024-9999 -n1)
 SECONDS=0
 
-LAB_DIR="/opt/firing-range"
+LAB_DIR="$INSTALL_DIR"
+SETUP_LOG="$LAB_DIR/logs/setup.log"
 BIN_DIR="bin"
 LOG_DIR="logs"
 CONF_DIR="conf"
@@ -37,26 +43,36 @@ NFR_GROUP="nfrlab"
 DEBUG=${DEBUG:-false}
 
 ### FUNCTIONS ###
-log() {
-  local mode="$1"
-  shift
-  local message=$*
-  local log
-  log="[$(date '+%Y-%m-%d %H:%M:%S')] [$APP_SHORT v$VERSION] $message"
+# ─── Subroutines to make the script work ─────────────────────────────────
 
+# ─── logging & debugging routine ───────────────────────────────── 
+log() {
+  local mode="$1"; shift
+  local message="$*"
+  local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
+  local header="[$APP_SHORT v$VERSION]"
+  local logline="$timestamp $header $message"
+
+  # choose target log: session-specific if ready, otherwise setup.log
+  local target="$SETUP_LOG"
+  if [[ -n "$SESSION_DIR" && -n "$LOGFILE" ]]; then
+    target="$LOGFILE"
+  fi
+
+  # ensure the directory exists
+  mkdir -p "$(dirname "$target")"
+  touch "$target"
+
+  # console output when requested
   if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
     echo "$message" >&2
   fi
-  if [[ -f $LOGFILE ]]; then
-    echo "$log" >> "$LOGFILE"
-  else
-    echo "$log" >> "$LAB_DIR/$LOG_DIR/setup.log"
-  fi
+
+  # finally append
+  echo "$logline" >> "$target"
 }
 
-#######################################################################
-# if the user wants TLS, we first create a CA
-#
+# ─── Create a CA for the session's certs ───────────────────────────────── 
 create_ca() {
   log console " 🛡  Generating new CA"
   local ca_dir="$1"  # e.g., "$SESSION_DIR/certs"
@@ -68,381 +84,631 @@ create_ca() {
     -subj "/CN=Lab $SESSION_ID CA"
 }
 
-#######################################################################
-# we will also create a cert for ech host launched
+# ─── Create a server cert for the session's servers ───────────────────────────────── 
 create_service_cert() {
   local ca_dir="$1"
-  local name="$2"        # e.g. ftp_host
-  local ip="$3"          # e.g. 192.168.200.101
-  local out_dir="$ca_dir/$name"
+  local name="$2"        # might be "stealthy-kernel.nfr.lab"
+  local ip="$3"          # e.g. "192.168.155.168"
+
+  # ─── Normalize the base name ───────────────────────────────────────────────
+  # strip any trailing ".nfr.lab"
+  local base_name="${name%${DOMAIN}}"
+  local fqdn="${base_name}${DOMAIN}"
+  local out_dir="$ca_dir/$base_name"
+  local key_file="$out_dir/$base_name.key"
+  local cnf_file="$out_dir/$base_name.cnf"
+  local csr_file="$out_dir/$base_name.csr"
+  local crt_file="$out_dir/$base_name.crt"
+
   mkdir -p "$out_dir"
-  log console " 🛡  Generating new certificate for *****.nfr.lab"
 
-  openssl genrsa -out "$out_dir/$name.key" 2048
+  log silent " 🔐  Generating TLS cert for $fqdn (CA-signed)"
 
-  cat > "$out_dir/$name.cnf" <<EOF
+  # 1) Private key (quiet)
+  if ! openssl genrsa -out "$key_file" 2048 >/dev/null 2>&1; then
+    log console " ❌  Failed to generate key for $fqdn"
+    return 1
+  fi
+
+  # 2) CSR + SAN config
+  cat > "$cnf_file" <<EOF
 [ req ]
 distinguished_name = req_distinguished_name
-req_extensions = v3_req
-prompt = no
+req_extensions     = v3_req
+prompt             = no
 
 [ req_distinguished_name ]
-CN = $name
+CN = $fqdn
 
 [ v3_req ]
 subjectAltName = @alt_names
 
 [ alt_names ]
-DNS.1 = $name
-IP.1 = $ip
+DNS.1 = $fqdn
+IP.1  = $ip
 EOF
 
-  openssl req -new -key "$out_dir/$name.key" \
-    -out "$out_dir/$name.csr" \
-    -config "$out_dir/$name.cnf" 
+  # 3) Generate CSR (quiet)
+  if ! openssl req -new \
+        -key "$key_file" \
+        -out "$csr_file" \
+        -config "$cnf_file" \
+        -batch -utf8 \
+        >/dev/null 2>&1; then
+    log console " ❌  Failed to generate CSR for $fqdn"
+    return 1
+  fi
 
-  openssl x509 -req \
-    -in "$out_dir/$name.csr" \
-    -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
-    -out "$out_dir/$name.crt" \
-    -days 365 -sha256 \
-    -extfile "$out_dir/$name.cnf" -extensions v3_req 2>/dev/null
+  # 4) Sign the CSR with our CA (quiet)
+  if ! openssl x509 -req \
+        -in "$csr_file" \
+        -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
+        -out "$crt_file" \
+        -days 365 -sha256 \
+        -extfile "$cnf_file" -extensions v3_req \
+        >/dev/null 2>&1; then
+    log console " ❌  Failed to sign certificate for $fqdn"
+    return 1
+  fi
+
+  log silent " ✔  Certificate for $fqdn written to $crt_file"
 }
-#######################################################################
 
 # Check dependancies
 check_dependencies() {
   local missing=0
+  local cmds=(docker grep shuf tee realpath openssl head od tr)
 
-  # Required commands
-  for cmd in docker grep shuf tee realpath openssl; do
+  # 1) Required binaries
+  for cmd in "${cmds[@]}"; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-      echo " ❌  Missing required command: $cmd"
+      log console " ❌  Missing required command: $cmd"
       missing=1
     fi
   done
 
-  # Check Docker is running
+  # 2) Docker daemon running?
   if ! docker info >/dev/null 2>&1; then
-    echo " ❌  Docker is not running or not accessible by current user."
+    log console " ❌  Docker is not running or not accessible by current user."
     missing=1
   fi
 
-  # Optional: Check for required Alpine base image
-  if ! docker image inspect alpine >/dev/null 2>&1; then
-    echo " ℹ️   Alpine image not found. Pulling it now..."
-    docker pull alpine || { echo " ❌  Failed to pull Alpine image."; missing=1; }
+  # 3) Alpine base image (pull if absent)
+  if ! docker image inspect alpine:latest >/dev/null 2>&1; then
+    log console " ℹ️   Alpine image not found. Pulling it now..."
+    if docker pull alpine:latest; then
+      log console " ✅  Pulled Alpine image."
+    else
+      log console " ❌  Failed to pull Alpine image."
+      missing=1
+    fi
   fi
 
-  # Optional: Check network driver
-  # if ! docker network ls | grep -q "$NETWORK"; then
-  #  echo " ℹ️   Docker network $NETWORK not found. It will be created by the script."
-  # fi
-
-  # Check for Docker Compose (V2 or V1 fallback)
-  if ! docker compose version &>/dev/null; then
-    echo " ❌  'docker compose' is not available. Please install Docker Compose V2."
-    missing=1
-  fi
-  
-  # Ensure the script exists before continuing
-  SCRIPT_FILE="$LAB_DIR/$BIN_DIR/launch_lab.sh"
-  if [[ ! -f "$SCRIPT_FILE" ]]; then
-    echo " ❌  $SCRIPT_FILE not found! Please ensure NFR is installed properly."
-    echo " 👉  It is recommended to run setup_lab to verify dependancies, setup the environemnt."
+  # 4) Docker Compose plugin or binary
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+  else
+    log console " ❌  Neither 'docker compose' (plugin) nor 'docker-compose' found."
     missing=1
   fi
 
+  # 5) Script file sanity check
+  local script_file="$BIN_DIR/launch_lab.sh"
+  if [[ ! -f "$script_file" ]]; then
+    log console " ❌  $script_file not found! Please ensure NFR is installed properly."
+    log console " 👉  It is recommended to run setup_lab to verify dependencies and set up the environment."
+    missing=1
+  fi
 
-  # exit with error if anything is missing
+  # 6) Final verdict
   if [[ $missing -eq 1 ]]; then
-    echo " 🚫  One or more required components are missing. Exiting."
+    log console " 🚫  One or more required components are missing. Exiting."
     exit 1
   fi
 
-  echo " ✅  All required components are present."
+  log console " ✅  All required components are present."
 }
+
 
 # Generate a fake flag
 generate_flag() {
-  echo "FLAG{$(openssl rand -hex 8)}"
+  local service="$1"
+  local rand flag
+
+  # try openssl first
+  if rand=$(openssl rand -hex 8 2>/dev/null); then
+    rand=${rand^^}                      # uppercase
+  else
+    # fallback: read 8 bytes and hex-encode
+    rand=$(head -c8 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    rand=${rand^^}
+  fi
+
+  flag="FLAG{$rand}"
+  log console " 🔑 Generated flag${service:+ for $service}"
+  echo "$flag"
 }
 
-# Get the Victim User
+### pick a random non-comment/non-blank line from a file ###
+_pick_random_entry() {
+  local file="$1"
+  grep -vE '^\s*#|^\s*$' "$file" 2>/dev/null | shuf -n1
+}
+
+# Victim User
 get_vuser() {
-  log silent "Grabbing a random victim user"
-  local user_file="$LAB_DIR/conf/dicts/vusers.conf"
+  log silent "Selecting random victim user"
+  local dict_dir="$LAB_DIR/conf/dicts"
+  local user_file="$dict_dir/vusers.conf"
 
-  if [[ ! -f "$user_file" ]]; then
-    log console " ❌  User file not found: $user_file" >&2
+  if [[ ! -r "$user_file" ]]; then
+    log console " ❌  User dictionary not found or unreadable: $user_file"
     return 1
   fi
 
-  # Filter out empty or comment lines, then pick a random user
-  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$user_file")
+  local entry=$(_pick_random_entry "$user_file")
+  if [[ -z "$entry" ]]; then
+    log console " ❌  No valid users in $user_file"
+    return 1
+  fi
+
+  echo "$entry"
 }
 
-# Get the Victim Password
+# Victim Password
 get_vpass() {
-  log silent "Grabbing a random victim password"
-  local pass_file="$LAB_DIR/conf/dicts/vpasswds.conf"
+  log silent "Selecting random victim password"
+  local dict_dir="$LAB_DIR/conf/dicts"
+  local pass_file="$dict_dir/vpasswds.conf"
 
-  if [[ ! -f "$pass_file" ]]; then
-    echo "❌ Password file not found: $pass_file" >&2
+  if [[ ! -r "$pass_file" ]]; then
+    log console " ❌  Password dictionary not found or unreadable: $pass_file"
     return 1
   fi
 
-  # Filter out empty or comment lines, then pick a random password
-  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$pass_file")
+  local entry=$(_pick_random_entry "$pass_file")
+  if [[ -z "$entry" ]]; then
+    log console " ❌  No valid passwords in $pass_file"
+    return 1
+  fi
+
+  echo "$entry"
 }
 
+# Victim SNMP Community
 get_vcommunity() {
-  log silent "Grabbing a random victim snmp community"
-  local comm_file="$LAB_DIR/conf/dicts/communities.conf"
+  log silent "Selecting random SNMP community"
+  local dict_dir="$LAB_DIR/conf/dicts"
+  local comm_file="$dict_dir/communities.conf"
 
-  if [[ ! -f "$comm_file" ]]; then
-    echo "❌ Community file not found: $comm_file" >&2
+  if [[ ! -r "$comm_file" ]]; then
+    log console " ❌  Community dictionary not found or unreadable: $comm_file"
     return 1
   fi
 
-  # Filter out empty or comment lines, then pick a random password
-  shuf -n 1 < <(grep -vE '^\s*#|^\s*$' "$comm_file")
+  local entry=$(_pick_random_entry "$comm_file")
+  if [[ -z "$entry" ]]; then
+    log console " ❌  No valid communities in $comm_file"
+    return 1
+  fi
+
+  echo "$entry"
 }
 
 get_unique_hostname() {
+  log silent "Selecting unique hostname"
   local conf_file="$LAB_DIR/conf/dicts/hostname.conf"
-  [[ -f "$conf_file" ]] || {
-    echo "❌ Hostname config not found: $conf_file" >&2
+
+  # sanity check
+  if [[ ! -r "$conf_file" ]]; then
+    log console " ❌  Hostname config not found or unreadable: $conf_file"
     return 1
-  }
+  fi
 
-  local in_section=""
-  local adjectives=()
-  local nouns=()
-
-  # Read and categorize lines
+  # parse sections
+  local section="" line
+  local -a adjectives=() nouns=()
   while IFS= read -r line || [[ -n "$line" ]]; do
-    line=$(echo "$line" | xargs)  # Trim whitespace
+    line="${line##*( )}"       # trim leading
+    line="${line%%*( )}"       # trim trailing
     [[ -z "$line" || "$line" =~ ^# ]] && continue
 
     case "$line" in
-      "[ADJECTIVES]") in_section="adjective" ;;
-      "[NOUNS]")      in_section="noun" ;;
+      "[ADJECTIVES]") section="adj" ;;
+      "[NOUNS]")      section="noun" ;;
       *)
-        if [[ "$in_section" == "adjective" ]]; then
+        if [[ $section == "adj" ]]; then
           adjectives+=("$line")
-        elif [[ "$in_section" == "noun" ]]; then
+        elif [[ $section == "noun" ]]; then
           nouns+=("$line")
         fi
         ;;
     esac
   done < "$conf_file"
 
-  local max_attempts=100
-  local attempt=0
+  # ensure we have entries
+  if (( ${#adjectives[@]} == 0 )) || (( ${#nouns[@]} == 0 )); then
+    log console " ❌  Hostname config must include both [ADJECTIVES] and [NOUNS] sections"
+    return 1
+  fi
 
-  while (( attempt++ < max_attempts )); do
-    local adj=${adjectives[$RANDOM % ${#adjectives[@]}]}
-    local noun=${nouns[$RANDOM % ${#nouns[@]}]}
+  # attempt combinations
+  local max_attempts=100
+  for ((i=1; i<=max_attempts; i++)); do
+    local adj=${adjectives[RANDOM % ${#adjectives[@]}]}
+    local noun=${nouns[RANDOM % ${#nouns[@]}]}
     local name="${adj}-${noun}"
 
     if [[ -z "${USED_HOSTNAMES[$name]}" ]]; then
       USED_HOSTNAMES["$name"]=1
-      echo "${name}${DOMAIN}"
+      local fqdn="${name}${DOMAIN}"
+      log silent "Chose hostname: $fqdn"
+      echo "$fqdn"
       return 0
     fi
   done
 
-  echo "❌ Unable to generate unique hostname after $max_attempts attempts" >&2
+  log console " ❌  Unable to generate unique hostname after $max_attempts attempts"
   return 1
 }
 
 get_random_ip() {
-  while :; do
+  log silent "Generating random IP on subnet $SUBNET"
+  
+  # sanity check
+  if [[ -z "$SUBNET" ]]; then
+    log console " ❌  SUBNET is not defined"
+    return 1
+  fi
+
+  local max_attempts=50
+  local last_octet ip
+
+  for ((i=1; i<=max_attempts; i++)); do
     last_octet=$(shuf -i130-250 -n1)
-    ip="$SUBNET.$last_octet"
-    if [[ ! " ${USED_IPS[*]} " =~ $ip ]]; then
+    ip="${SUBNET}.${last_octet}"
+    # check for membership in USED_IPS
+    if ! printf '%s\n' "${USED_IPS[@]}" | grep -qx "${ip}"; then
       USED_IPS+=("$ip")
+      log silent "Chose IP: $ip"
       echo "$ip"
-      return
+      return 0
     fi
   done
+
+  log console "❌ Unable to allocate a unique IP after $max_attempts attempts"
+  return 1
 }
 
 load_session_file() {
   local sess_file="$1"
-  local replace="$2"
-  log silent "Loading $sess_file into $LABDIR"
-  local path=$(dirname "$SESSION_DIR/$sess_file")
-  if [[ -f "$LAB_DIR/$sess_file" ]]; then
-    mkdir -p "$path"
-    if [[ "$replace" == "CONSOLE" ]]; then
-      local update=$(sed "s/%CONSOLE%/$SUBNET.2/" "$LAB_DIR/$sess_file")
-      echo "$update" > "$SESSION_DIR/$sess_file"  || echo "FAIL" 
-    else 
-      cp "$LAB_DIR/$sess_file" "$SESSION_DIR/$sess_file" || log console "❌ Can't copy $LAB_DIR/$sess_file to session Continuing..."
-    fi
-  else 
-    echo "❌ Missing core config file for console server. $LAB_DIR/$sess_file Please reinstall or update"
+  local mode="$2"           # e.g. "CONSOLE" or empty
+  local src dest dir
+
+  log silent "Loading session file: $sess_file (mode: ${mode:-COPY})"
+  src="$LAB_DIR/$sess_file"
+  dest="$SESSION_DIR/$sess_file"
+  dir="$(dirname "$dest")"
+
+  # 1) Source must exist
+  if [[ ! -f "$src" ]]; then
+    log console "❌ Missing core config file: $src"
     exit 1
+  fi
+
+  # 2) Ensure destination directory
+  mkdir -p "$dir" || {
+    log console "❌ Failed to create directory: $dir"
+    return 1
+  }
+
+  # 3) Copy or replace placeholder
+  if [[ "$mode" == "CONSOLE" ]]; then
+    if sed "s/%CONSOLE%/${SUBNET}.2/" "$src" > "$dest"; then
+      log silent "✔ Processed $sess_file with CONSOLE replacement"
+    else
+      log console "❌ Failed to process placeholder in $sess_file"
+      return 1
+    fi
+  else
+    if cp "$src" "$dest"; then
+      log silent "✔ Copied $sess_file to session directory"
+    else
+      log console "❌ Failed to copy $src to $dest"
+      return 1
+    fi
   fi
 }
 
-
 load_emulated_services() {
-  log console "🔎 Loading target services..."
+  log console "🔎 Loading emulated services..."
   local services_dir="$LAB_DIR/target/services"
-  local script svc port desc version
+  local script svc port_meta desc version daemon tmp_port
 
   SERVICE_LIST=()
 
+  # ─── Load each emulator script ──────────────────────────────────────────────
   for script in "$services_dir"/*.sh; do
     [[ -f "$script" ]] || continue
+    svc=$(basename "$script" .sh)
     log silent " - Loading $script"
 
-    svc=$(basename "$script" .sh)
-    port=$(parse_meta_var "$script" "EM_PORT")
+    port_meta=$(parse_meta_var "$script" "EM_PORT")
     desc=$(parse_meta_var "$script" "EM_DESC")
     version=$(parse_meta_var "$script" "EM_VERSION")
     daemon=$(parse_meta_var "$script" "EM_DAEMON")
 
-    if [[ -n "$port" ]]; then
-
-      IFS=' ' read -ra ports <<< "${port}"
+    if [[ -n "$port_meta" ]]; then
+      tmp_port=""
+      IFS=' ' read -ra ports <<<"$port_meta"
       for port_proto in "${ports[@]}"; do
-        proto=$(cut -d':' -f1 <<< "$port_proto")
-        port=$(cut -d':' -f2 <<< "$port_proto")
-        tls=$(cut -d':' -f3 <<< "$port_proto")
-        if [[ -n "$tls" ]]; then
-          tmp_port="$proto:$port:tls $tmp_port"
-        else 
-          tmp_port="$proto:$port $tmp_port"
+        proto=${port_proto%%:*}
+        rest=${port_proto#*:}
+        port_num=${rest%%:*}
+        tls_flag=${rest#*:}
+        if [[ "$tls_flag" != "$rest" ]]; then
+          tmp_port+="$proto:$port_num:tls "
+        else
+          tmp_port+="$proto:$port_num "
         fi
       done
-      services["${svc}-em"]=$tmp_port
+      tmp_port=${tmp_port%% }  # trim trailing space
+
+      services["${svc}-em"]="$tmp_port"
+      services_meta["${svc}-em"]="$version:$daemon:$desc"
       SERVICE_LIST+=("$svc")
       log silent "✔️  Loaded emulator: ${svc}-em on $tmp_port"
-      tmp_port=" "
     else
       log silent "⚠️  Skipping emulator: $svc (missing EM_PORT)"
     fi
   done
 
+  # ─── List-only mode ─────────────────────────────────────────────────────────
   if [[ "$list_services_only" == true ]]; then
-    log silent "List services Only startng..."
+    log silent "List services only starting..."
 
-    # header and formating for crisp output
     echo
     echo " 📋 Target Service Modules:"
     echo " ────────────────────────────────────────────────────────────────────"
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "Service" "Daemon" "Port" "Description"
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "───────" "─────────────" "──────────" "─────────────────────"
 
-
-    # List full services
-    for svc in $(printf "%s\n" "${!services[@]}"); do
-      if [[ ! "$svc" =~ "-em"$ ]]; then
-        local details="${services_meta[$svc]}"
-        ver=$(cut -d':' -f1 <<< "$details")
-        daemon=$(cut -d':' -f2 <<< "$details")
-        desc=$(cut -d':' -f3 <<< "$details")
-        IFS=' ' read -ra ports <<< "${services[$svc]}"
-        for port_proto in "${ports[@]}"; do
-          proto=$(cut -d':' -f1 <<< "$port_proto")
-          port=$(cut -d':' -f2 <<< "$port_proto")
-          tls=$(cut -d':' -f3 <<< "$port_proto")
+    # Real (non-emulated) services
+    for key in "${!services[@]}"; do
+      if [[ ! "$key" =~ -em$ ]]; then
+        IFS=':' read -r ver daemon desc <<<"${services_meta[$key]}"
+        IFS=' ' read -ra p_arr <<<"${services[$key]}"
+        for pp in "${p_arr[@]}"; do
+          proto=$(cut -d':' -f1 <<<"$pp")
+          port_num=$(cut -d':' -f2 <<<"$pp")
+          tls=$(cut -d':' -f3 <<<"$pp")
           if [[ -n "$tls" ]]; then
-            printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS"
-          else 
-            printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
+            printf "  %-12s\t%-10s\t%-8s\t%s\n" "$key" "${daemon:-N/A}" "${proto}:${port_num}:tls" "${desc:-No description provided} with TLS"
+          else
+            printf "  %-12s\t%-10s\t%-8s\t%s\n" "$key" "${daemon:-N/A}" "${proto}:${port_num}" "${desc:-No description provided}"
           fi
         done
       fi
     done
 
-    # Now let's look at the Emulated services we just loaded.
     echo
     echo " 📋 Emulated Service Modules:"
     echo " ────────────────────────────────────────────────────────────────────"
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "Service" "Daemon" "Port" "Description"
     printf "  %-12s\t%-10s\t%-8s\t%s\n" "───────" "─────────────" "──────────" "─────────────────────"
 
-    # List emulated services
+    # Emulated services
     for svc in "${SERVICE_LIST[@]}"; do
-      script="$services_dir/${svc}.sh"
-      log silent "👁‍🗨 Loading service $svc in $script"
-      port=$(parse_meta_var "$script" "EM_PORT")
-      desc=$(parse_meta_var "$script" "EM_DESC")
-      version=$(parse_meta_var "$script" "EM_VERSION")
-      daemon=$(parse_meta_var "$script" "EM_DAEMON")
-      IFS=' ' read -ra ports <<< "${port}"
-      log silent "👁‍🗨 Grabbed port=\"${port}\", daemon = \"${daemon}\", version=\"${version}\", desc=\"${desc}\" for $svc" 
-      # for 
-      for port_proto in "${ports[@]}"; do
-        proto=$(cut -d':' -f1 <<< "$port_proto")
-        port=$(cut -d':' -f2 <<< "$port_proto")
-        tls=$(cut -d':' -f3 <<< "$port_proto")
+      local key="${svc}-em"
+      IFS=':' read -r ver daemon desc <<<"${services_meta[$key]}"
+      IFS=' ' read -ra p_arr <<<"${services[$key]}"
+      for pp in "${p_arr[@]}"; do
+        proto=$(cut -d':' -f1 <<<"$pp")
+        port_num=$(cut -d':' -f2 <<<"$pp")
+        tls=$(cut -d':' -f3 <<<"$pp")
         if [[ -n "$tls" ]]; then
-          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}:tls" "${desc:-No description provided} with TLS"
-        else 
-          printf "  %-12s\t%-10s\t%-8s\t%s\n" "${svc}-em" "${daemon:-N/A}" "${proto:-N/A}:${port:-N/A}" "${desc:-No description provided}"
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "$key" "${daemon:-N/A}" "${proto}:${port_num}:tls" "${desc:-No description provided} with TLS"
+        else
+          printf "  %-12s\t%-10s\t%-8s\t%s\n" "$key" "${daemon:-N/A}" "${proto}:${port_num}" "${desc:-No description provided}"
         fi
       done
-    if [[ "$DEBUG" == "true" ]]; then
-       echo "⏩ ───────────────────────────────────────────────"
-    fi
+      [[ "$DEBUG" == "true" ]] && echo "⏩ ───────────────────────────────────────────────"
     done
+
     echo
     exit 0
   fi
 }
 
 parse_meta_var() {
-  local file="$1"
-  local var="$2"
-  # log silent "👁‍🗨 Parsing ${var} config line from ${file} "
-  grep -E "^$var=" "$file" | cut -d= -f2- | cut -d"#" -f1 | sed 's/^ *//; s/ *$//;' | tr -d '"'
+  local file="$1" var="$2" line value
+
+  # 1) File must be readable
+  if [[ ! -r "$file" ]]; then
+    log console "❌ Cannot read meta file: $file"
+    return 1
+  fi
+
+  # 2) Grab the last matching line
+  #    Allow optional whitespace before var name
+  if ! line=$(grep -E "^[[:space:]]*${var}=" "$file" | tail -n1); then
+    log silent "⚠ No $var= entry in $file"
+    echo ""
+    return 0
+  fi
+
+  # 3) Strip VAR= prefix
+  value=${line#*=}
+
+  # 4) Remove inline comments
+  value=${value%%#*}
+
+  # 5) Remove surrounding quotes (single or double)
+  value=${value#\"}; value=${value%\"}
+  value=${value#"\'"}; value=${value%"\'"}
+
+  # 6) Trim any leading/trailing whitespace
+  value=$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+  echo "$value"
 }
 
-dump_services() {
-  for key in $(printf "%s\n" "${!services[@]}" | sort); do
-    echo "$key => ${services[$key]}"
-  done
-}
 
 check_service() {
-  local ckservice="$1"
-  local svcs="${services[$ckservice]}"
+  local svc="$1"
+  local ports="${services[$svc]}"
 
-  [[ -z "$svcs" ]] && { log console " ❌  Unable to support $ckservice at this time"; exit 1; }
+  if [[ -z "$ports" ]]; then
+    log console "❌ Service not supported or not found: $svc"
+    exit 1
+  fi
 
-  log silent "Found Ports for $ckservice - $svcs"
+  log silent "✔ Found ports for $svc: $ports"
 }
 
-create_resolv(){
+create_resolv() {
+  local resolv_path="$SESSION_DIR/$TARGET_DIR/conf/resolv.conf"
+  local resolv_dir
+  resolv_dir="$(dirname "$resolv_path")"
+
+  # ensure the target config directory exists
+  if ! mkdir -p "$resolv_dir"; then
+    log console "❌ Failed to create directory: $resolv_dir"
+    return 1
+  fi
+
+  # append our DNS settings
   {
     echo "nameserver ${SUBNET}.2"
     echo "search lan nfr.lab"
     echo "options ndots:0"
-  } >> "${SESSION_DIR}/${TARGET_DIR}/conf/resolv.conf"
+  } >> "$resolv_path" || {
+    log console "❌ Failed to write DNS config to $resolv_path"
+    return 1
+  }
+
+  log silent "✔ Wrote DNS resolver config to $resolv_path"
 }
 
 add_hosts() {
   local dns_host="$1"
   local dns_ip="$2"
-  # let's make sure we don't have any other entries from previous labs
-  log console " 🌐 Adding host to /etc/host for easier access"
-  echo "$dns_ip\t$dns_host\t# $SESSION_ID" >> "/etc/hosts"
+  local tag="# $SESSION_ID"
+  local hosts_file="/etc/hosts"
+
+  log console " 🌐  Adding host entry for $dns_host ($dns_ip) to $hosts_file"
+
+  # Remove any previous entries for this session
+  if ! sed -i.bak "/${tag//\//\\/}/d" "$hosts_file"; then
+    log console " ⚠️  Failed to clean old entries from $hosts_file"
+  fi
+
+  # Append the new entry
+  if echo -e "${dns_ip}\t${dns_host}\t${tag}" >> "$hosts_file"; then
+    log silent " ✔  Added $dns_host to $hosts_file"
+  else
+    log console " ❌  Failed to append $dns_host to $hosts_file"
+    return 1
+  fi
+}
+
+add_zone_entry() {
+  local ip=$1 host=$2 rev
+  echo "$ip    $host" >> "$ZONEFILE"
+  rev=$(awk -F. '{print $4"."$3"."$2"."$1}' <<<"$ip")
+  echo "ptr-record=${rev}.in-addr.arpa,$host" >> "$ZONEFILE"
 }
 
 get_image_for_service() {
-  case $1 in
-    *-em) echo "unspecific/victim-v1-tiny:1.4" ;;
-    *) echo "unspecific/victim-v1-tiny:1.4" ;;
+  local svc="$1"
+  log silent "Selecting image for service $svc"
+
+  # Defaults, override via env:
+  local em_prefix="${EMULATOR_IMAGE_PREFIX:-unspecific/victim-v1-tiny}"
+  local em_tag="${EMULATOR_IMAGE_TAG:-1.4}"
+  local real_prefix="${SERVICE_IMAGE_PREFIX:-unspecific/victim-v1-large}"
+  local real_tag="${SERVICE_IMAGE_TAG:-1.0}"
+
+  local image
+  case "$svc" in
+    *-em)
+      image="${em_prefix}:${em_tag}"
+      ;;
+    *)
+      image="${real_prefix}:${real_tag}"
+      ;;
   esac
+
+  echo "$image"
 }
 
+# ─── Helper: reverse an IPv4 address ─────────────────────────────────────────
+reverse_ip() {
+  local ip="$1"
+  # e.g. “192.168.200.254” → “254.200.168.192”
+  awk -F. '{ print $4"."$3"."$2"."$1 }' <<<"$ip"
+}
 
+# ─── Build the dnsmasq “addn-hosts” zone file ────────────────────────────────
+create_zonefile() {
+  local zonefile="$ZONEFILE"
+  local host_ip="${SUBNET}.254"
+  local console_ip="${SUBNET}.2"
+  local host_rev=$(reverse_ip "$host_ip")
+  local console_rev=$(reverse_ip "$console_ip")
+
+  # make sure the directory is there
+  mkdir -p "$(dirname "$zonefile")"
+
+  # overwrite (not append) so we start fresh
+  cat >"$zonefile" <<EOF
+# dnsmasq extra hosts for session $SESSION_ID
+# Forward entries
+address=/host.nfr.lab/$host_ip
+address=/console.nfr.lab/$console_ip
+
+# Reverse PTR entries
+ptr-record=${host_rev}.in-addr.arpa,host.nfr.lab
+ptr-record=${console_rev}.in-addr.arpa,console.nfr.lab
+EOF
+
+  log silent "✔ Wrote dnsmasq zone file: $zonefile"
+}
+
+# ─── responding to HELP -h ────────────────────────────────
+usage() {
+  cat <<EOF
+
+$APP_SHORT v$VERSION by Lee 'MadHat' Heath <lheath@unspecific.com>
+
+Sets up a containerized lab network for offensive security testing.
+Each session is unique (IP, hostnames, services, flags), with optional TLS.
+
+Usage: $0 [options]
+
+Options:
+  -n <number>    Number of targets to launch (default: $NUM_SERVICES)
+  -d             Dry run (don't actually start containers)
+  -i <session>   Replay an existing session by ID
+  -t             Skip TLS/SSL cert generation and encrypted ports
+  -p             Skip plain-text (unencrypted) protocols
+  -s <service>   Launch only the named service (use -l to list)
+  -l             List available services and exit
+  -V             Show version and exit
+  -h             Show this help message and exit
+
+EOF
+}
+
+#  _   _ ______ _____    __  __       _       
+# | \ | |  ____|  __ \  |  \/  |     (_)      
+# |  \| | |__  | |__) | | \  / | __ _ _ _ __  
+# | . ` |  __| |  _  /  | |\/| |/ _` | | '_ \ 
+# | |\  | |    | | \ \  | |  | | (_| | | | | |
+# |_| \_|_|    |_|  \_\ |_|  |_|\__,_|_|_| |_|
+#
 # this is where the code starts
 # we have to declare our starting point.
 # this will change soon-ish
@@ -479,423 +745,498 @@ declare -A services_meta=(
 # Let's look at the options.
 # Make sure we identify all the flags used.
 # remember process flow
+# ─── Defaults ───────────────────────────────────────────────────────────────
+dry_run=false
+skip_plain=false
+skip_tls=false
+list_services_only=false
+single_service=""
+REPLAY_SESSION_ID=""
+NUM_SERVICES=5
 
-while getopts "ln:hdVi:tps:" opt; do
+# ─── Parse Options ────────────────────────────────────────────────────────────
+# the leading ':' means we handle missing-arg errors in the case ':'
+while getopts ":n:di:pts:lVh" opt; do
   case "$opt" in
-    n)
-      NUM_SERVICES="$OPTARG"
-      ;;
-    d)
-      DO_NOT_RUN=true
-      ;;
-    h)
-      echo
-      echo "$APP v$VERSION by Lee 'MadHat' Heath <lheath@unspecifc.com>"
-      echo "$APP_SHORT sets up a virtual lab network of containerized targets for offensive security testing."
-      echo "Each lab session is unique with randomized IPs, hostnames, services, and flags."
-      echo "Targets support full TLS using a session-specific certificate authority (CA)."
-      echo "Sessions are fully scorable using the score_card system, and all labs are replayable."
-      echo "Perfect for practicing Nmap scanning, service fingerprinting, brute forcing, and flag hunting."
-      echo
-      echo "Usage: $0 [options]"
-      echo
-      echo "Options:"
-      echo "  -n <number>      Launch specified number of targets (default: 5)"
-      echo "  -d               Dry run (do not launch Docker containers)"
-      echo "  -i <SESSION_ID>  Replay existing session"
-      echo "  -t               Skip TLS/SSL cert generation and encrypted connections"
-      echo "  -p               Skip Plain text (unencrypted) protocols"
-      echo "  -l               List available services (both native and emulated)"
-      echo "  -V               Show version and exit"
-      echo "  -h               Show this help message"
-      echo "  -s               Service.  If you specify a service only one target is generated"
-      echo "                   Use -l to see the list of supported services."
-      echo
-      exit 0
-      ;;
-    l)
-      list_services_only=true
-      ;;
-    V)
-      echo
-      echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
-      echo 
-      exit 0
-      ;;
-    i)
-      REPLAY_SESSION_ID="$OPTARG"
-      ;;
-    p)
-      skip_plain=true
-      ;;
-    t)
-      sklp_tls=true
-      ;;
-    s) 
-      single_service="$OPTARG"
-      ;;
-    \?)
-      echo "❌ Invalid option: -$OPTARG" >&2
-      exit 1
-      ;;
-    :)
-      echo "❌ Option -$OPTARG requires an argument." >&2
-      exit 1
-      ;;
-    *)
-      echo "Invalid option. Use -h for help."
-      exit 1
-      ;;
+    n)  NUM_SERVICES="$OPTARG" ;;
+    d)  dry_run=true ;;
+    i)  REPLAY_SESSION_ID="$OPTARG" ;;
+    t)  skip_tls=true ;;
+    p)  skip_plain=true ;;
+    s)  single_service="$OPTARG" ;;
+    l)  list_services_only=true ;;
+    V)  echo "$APP_SHORT v$VERSION"; exit 0 ;;
+    h)  usage; exit 0 ;;
+    :)  echo "❌ Option -$OPTARG requires an argument." >&2; usage; exit 1 ;;
+    \?) echo "❌ Invalid option: -$OPTARG" >&2; usage; exit 1 ;;
   esac
 done
 
-# 🚨 Let's introduce ourselves
-echo
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+shift $((OPTIND -1))
 
+# 🚨 Banner
+echo
+log console " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+
+# 1) Verify dependencies
 check_dependencies
 
-# Prepare session folder
+# 2) Prepare session folder (unless we’re just listing)
 SESSION_TIME=$(date +"%Y-%m-%d_%H-%M-%S")
-if [[ "$list_services_only" != true ]]; then
-  SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
-else
+if [[ "$list_services_only" == true ]]; then
   SESSION_DIR="."
-fi
-
-# If we are just replaying, we can stop here
-#
-if [[ -n "${REPLAY_SESSION_ID:-}" ]]; then
-  SESSION_DIR="/opt/firing-range/logs/lab_$REPLAY_SESSION_ID"
-  COMPOSE_FILE="$SESSION_DIR/docker-compose.yml"
-
-  echo "🔁 Replaying session $REPLAY_SESSION_ID..."
-
-  if [[ ! -f "$COMPOSE_FILE" ]]; then
-    echo "❌ docker-compose.yml not found in $SESSION_DIR"
+else
+  SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
+  mkdir -p "$SESSION_DIR" || {
+    log console "❌ Failed to create session directory: $SESSION_DIR"
     exit 1
-  fi
-  log console " 🚀  Launching Replay of Session $REPLAY_SESSION_ID"
-  docker compose -f "$COMPOSE_FILE" up -d
-  if [[ -f "$SESSION_DIR/score_card" ]]; then
-    cp "$SESSION_DIR/score_card" "./score_card_$REPLAY_SESSION_ID"
-    echo "📄 Score card restored to ./score_card_$REPLAY_SESSION_ID"
-    echo "📄 run 'check_lab score_card_$REPLAY_SESSION_ID' to check your card"
-    REAL_USER="${SUDO_USER:-$USER}"
-    chown "$REAL_USER:$REAL_USER" "./score_card_$REPLAY_SESSION_ID"
-  fi
-  echo "✅ Session $REPLAY_SESSION_ID relaunched."
-  exit 0
+  }
 fi
 
-# Last option before we build
-load_emulated_services
-# Make sure no one made it this far without root
-if [[ $EUID -ne 0 ]]; then
-  echo "❌ Root privileges are required to continue."
-  exit 1
-fi
-
-echo "$SESSION_TIME Creating new session $SESSION_ID by $USER" >> "$LAB_DIR/logs/setup.log"
-
-# If it is a single service, lets deal with that
-if [[ -n "$single_service" ]]; then
-  log console " 🚨  Single Service Option - Running $single_service"
-  check_service "$single_service"
-
-  services=(
-    ["$single_service"]="${services[$single_service]}"
-  )
-  
-  log silent "Single Service setup $single_service ${services[$single_service]}"
-  NUM_SERVICES=1
-fi
-
-# Otherwise it's time to build the lab
-
+# ─── Session Environment Variables ───────────────────────────────────────────
 LOGFILE="$SESSION_DIR/lab.log"
 COMPOSE_FILE="docker-compose.yml"
 SCORE_CARD="score_card"
-SERVERNAME=$(hostname)
-NETWORK=range-$SESSION_ID
+SERVERNAME="$(hostname)"
+NETWORK="range-$SESSION_ID"
 NUM_SERVICES="${NUM_SERVICES:-5}"
-CA_DIR="$SESSION_DIR/${CONF_DIR}/${CERT_DIR}"
+CA_DIR="$SESSION_DIR/$CONF_DIR/$CERT_DIR"
 SYSLOG_FILE="$SESSION_DIR/$LOG_DIR/containers"
 ZONEFILE="$SESSION_DIR/$CONF_DIR/nfr.lab.zone"
-declare -A USED_HOSTNAMES=()
+HOSTS="/etc/hosts"
+declare -gA USED_HOSTNAMES=()
 
-# create lab session environment
-mkdir -p "$SESSION_DIR" "$CA_DIR" "$SESSION_DIR/$LOG_DIR/services"
-mkdir -p "$SESSION_DIR/$BIN_DIR" "$SESSION_DIR/$CONF_DIR"
-mkdir -p "$SESSION_DIR/$TARGET_DIR/services"
-echo "--------- NEW SESSION $SESSION_ID ------------------" > $LOGFILE || echo "cant create logfile"
-chgrp $NFR_GROUP $LOGFILE
-chmod 664 $LOGFILE
-log silent "Initiated a new session directory $SESSION_DIR"
+# 3) Replay mode?
+if [[ -n "$REPLAY_SESSION_ID" ]]; then
+  local replay_dir="$LAB_DIR/$LOG_DIR/lab_$REPLAY_SESSION_ID"
+  local replay_compose="$replay_dir/docker-compose.yml"
 
-#initiate the zone file
-echo "$SUBNET.254     host.nfr.lab" >> "$ZONEFILE"
-reversed_ip=$(echo "$SUBNET.254" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
-echo "ptr-record=${reversed_ip}.in-addr.arpa,host.nfr.lab" >> "$ZONEFILE"
-echo "$SUBNET.2     console.nfr.lab" >> "$ZONEFILE"
-reversed_ip=$(echo "$SUBNET.2" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
-echo "ptr-record=${reversed_ip}.in-addr.arpa,console.nfr.lab" >> "$ZONEFILE"
+  log console " 🔁 Replaying session $REPLAY_SESSION_ID..."
+
+  if [[ ! -f "$replay_compose" ]]; then
+    log console " ❌ Compose file not found: $replay_compose"
+    exit 1
+  fi
+
+  log console " 🚀 Launching replay of session $REPLAY_SESSION_ID"
+  $COMPOSE_CMD -f "$replay_compose" up -d
+
+  # Restore score card if present
+  score_src="$replay_dir/$SCORE_CARD"
+  if [[ -f "$score_src" ]]; then
+    score_dest="./${SCORE_CARD}_$REPLAY_SESSION_ID"
+    cp "$score_src" "$score_dest"
+    log console " 📄  Score card restored to $score_dest"
+    log console " 📄  Run 'check_lab $score_dest' to view your results."
+    chown "${SUDO_USER:-$USER}:${SUDO_USER:-$USER}" "$score_dest"
+  fi
+
+  log console " ✅ Session $REPLAY_SESSION_ID relaunched."
+  exit 0
+fi
+
+# Load emulated services (will exit if -l/list-only)
+load_emulated_services
+
+
+# ─── Create session directory structure ─────────────────────────────────────
+mkdir -p "$SESSION_DIR" || {
+  log console " ❌ Failed to create session directory: $SESSION_DIR"
+  exit 1
+}
+mkdir -p \
+  "$(dirname "$LOGFILE")" \
+  "$(dirname "$COMPOSE_FILE")" \
+  "$CA_DIR" \
+  "$SESSION_DIR/$LOG_DIR/services" \
+  "$SESSION_DIR/$BIN_DIR" \
+  "$SESSION_DIR/$CONF_DIR" \
+  "$SESSION_DIR/$TARGET_DIR/services" || {
+    log console " ❌ Failed to create session directories under $SESSION_DIR"
+    exit 1
+}
+ 
+# ─── Bootstrap & protect session log & score card ───────────────────────────
+touch "$LOGFILE"    && chgrp "$NFR_GROUP" "$LOGFILE"    && chmod 664 "$LOGFILE"
+touch "$SESSION_DIR/$SCORE_CARD" && chgrp "$NFR_GROUP" "$SESSION_DIR/$SCORE_CARD" && chmod 664 "$SESSION_DIR/$SCORE_CARD"
+
+log silent " 🗒️  Session $SESSION_ID logging to $LOGFILE"
+log console " 📊  Score card initialized at $SESSION_DIR/$SCORE_CARD"
+
+
+# Verify still running as root
+if [[ $EUID -ne 0 ]]; then
+  log console "❌ Root privileges are required to continue."
+  exit 1
+fi
+
+# Start session logging in the session dir
+mkdir -p "$(dirname "$LOGFILE")"
+touch "$LOGFILE"
+log console " 🗒️  Session $SESSION_ID logging to $LOGFILE"
+
+
+# If the user requested only one service, filter everything else out
+if [[ -n "$single_service" ]]; then
+  log console " 🚨 Single-Service mode: launching only '$single_service' service"
+  check_service "$single_service"
+
+  # Save the chosen service’s port spec and metadata
+  port_cfg="${services[$single_service]}"
+  meta_cfg="${services_meta[$single_service]}"
+
+  # Re-declare as assoc arrays with just that one entry
+  declare -gA services=(
+    ["$single_service"]="$port_cfg"
+  )
+  declare -gA services_meta=(
+    ["$single_service"]="$meta_cfg"
+  )
+
+  log silent "✔ Configured single service: $single_service => $port_cfg"
+  NUM_SERVICES=1
+fi
+
+# ─── Initialize session log ──────────────────────────────────────────────────
+# Session log
+if touch "$LOGFILE"; then
+  chgrp "$NFR_GROUP" "$LOGFILE"
+  chmod 664 "$LOGFILE"
+  log silent "✔ Session log initialized at $LOGFILE"
+else
+  log console "❌ Cannot create session log file at $LOGFILE"
+  exit 1
+fi
+
+# Score card
+if touch "$SESSION_DIR/$SCORE_CARD"; then
+  chgrp "$NFR_GROUP" "$SESSION_DIR/$SCORE_CARD"
+  chmod 664 "$SESSION_DIR/$SCORE_CARD"
+  log silent "✔ Score card initialized at $SESSION_DIR/$SCORE_CARD"
+else
+  log console "❌ Cannot create score card file at $SESSION_DIR/$SCORE_CARD"
+  exit 1
+fi
+
+create_zonefile
 
 log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 log console " 🚀  Launching random lab at $SESSION_TIME"
 log console " 🆔  SESSION_ID $SESSION_ID"
-{
-  echo "# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>" 
-  echo "#    Started on $SERVERNAME at $SESSION_TIME"
-  echo "session=$SESSION_ID"
-  echo "# service=telnet target=${SUBNET}.153 port=5537 proto=tcp flag=FLAG{89ea16740}"
-} > "$SCORE_CARD"
-log console " 📊  Score Card Created"
+# ─── Initialize Score Card ───────────────────────────────────────────────────
+cat > "$SESSION_DIR/$SCORE_CARD" <<EOF
+# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>
+#    Started on $SERVERNAME at $SESSION_TIME
+session=$SESSION_ID
+# hostname=<service_name> service=<service> target=<target_ip> port=<port> proto=<protocol> flag=<flag>
+EOF
+
+log console " 📊  Score Card Updated $SESSION_DIR/$SCORECARD"
 
 
+# ─── TLS Setup ───────────────────────────────────────────────────────────────
 if [[ "$skip_tls" != true ]]; then
-  log silent "🔐 Creating new CA for session at $CA_DIR"
+  log silent " 🔐 Creating new CA for session at $CA_DIR"
+  mkdir -p "$CA_DIR"
   create_ca "$CA_DIR"
 else
-  log silent "⚠️  TLS setup skipped (--no-tls enabled)"
+  log silent " ⚠️  TLS setup skipped (--no-tls enabled)"
 fi
 
-log console " 🌐  Creating Subnet for Scanning - ${SUBNET}.0/24 - $NETWORK"
-# moved to Docker Compose
+# ─── Subnet Announcement ────────────────────────────────────────────────────
+log console " 🌐  Creating subnet for scanning: ${SUBNET}.0/24 ($NETWORK)"
 
-# Start docker-compose.yml
-{
-  echo "# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date)"
-  echo "# SESSION_ID: $SESSION_ID"
-  echo "services:"
-} > "$SESSION_DIR/$COMPOSE_FILE"
-log silent " Created docker-compose.yaml - ${SESSION_DIR}/${COMPOSE_FILE}"
+# ─── Generate docker-compose.yml Header ────────────────────────────────────
+compose_path="$SESSION_DIR/$COMPOSE_FILE"
+cat > "$compose_path" <<EOF
+# Auto-generated docker-compose.yml (${APP}-v$VERSION) - $(date '+%Y-%m-%d %H:%M:%S')
+# SESSION_ID: $SESSION_ID
+services:
+EOF
 
-{
-  echo "# Auto-generated services.map (${APP}-v$VERSION) - $(date)"
-  echo "# Services file for sesion $SESSION_ID"
-} >> "$SESSION_DIR/services.map"
-log silent " Created ${SESSION_DIR}/services.map"
+log silent "✔ Created docker-compose file: $compose_path"
 
-# set up the session specific files and folders
-cp -a "$LAB_DIR/$TARGET_DIR" "$SESSION_DIR/"
-chmod -R 755 "$SESSION_DIR/$TARGET_DIR/" || echo "chmod of $SESSION_DIR/$TARGET_DIR/ failed" 
-touch $SYSLOG_FILE
-chmod 664 $SYSLOG_FILE || echo "can't chmod $SYSLOG_FILE"
-touch "$SESSION_DIR/$TARGET_DIR/score.json"
-chmod 664 "$SESSION_DIR/$TARGET_DIR/score.json" || echo "can't chmod $SESSION_DIR/$TARGET_DIR/score.json"
-touch "$SESSION_DIR/$LOG_DIR/tcpdump"
-chmod 664 "$SESSION_DIR/$LOG_DIR/tcpdump" || echo "can't chmod $SESSION_DIR/$LOG_DIR/tcpdump"
+# ─── Generate services.map Header ────────────────────────────────────────────
+services_map="$SESSION_DIR/services.map"
+cat >> "$services_map" <<EOF
+# Auto-generated services.map (${APP}-v$VERSION) - $(date '+%Y-%m-%d %H:%M:%S')
+# Services file for session $SESSION_ID
+EOF
+log silent "✔ Created $services_map"
 
+# ─── Copy Target Templates ───────────────────────────────────────────────────
+if cp -a "$LAB_DIR/$TARGET_DIR/." "$SESSION_DIR/$TARGET_DIR/"; then
+  log silent "✔ Copied target directory to session"
+else
+  log console "❌ Failed to copy $LAB_DIR/$TARGET_DIR to $SESSION_DIR/$TARGET_DIR/"
+fi
+
+if chmod -R 755 "$SESSION_DIR/$TARGET_DIR/"; then
+  log silent "✔ Set execute permissions on target files"
+else
+  log console " ⚠️  chmod 755 failed on $SESSION_DIR/$TARGET_DIR/"
+fi
+
+# ─── Initialize Session Files ───────────────────────────────────────────────
+for f in "$SYSLOG_FILE" \
+         "$SESSION_DIR/$TARGET_DIR/score.json" \
+         "$SESSION_DIR/$LOG_DIR/tcpdump"; do
+  if touch "$f"; then
+    chmod 664 "$f" || log console " ⚠️  chmod 664 failed on $f"
+    log silent "✔ Initialized $f"
+  else
+    log console "❌ Cannot create file: $f"
+  fi
+done
+
+# ─── Load Console & Target Configs ──────────────────────────────────────────
 load_session_file "$CONF_DIR/console/rsyslog.conf"
 load_session_file "$CONF_DIR/console/dnsmasq.conf"
-load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" CONSOLE
+load_session_file "$TARGET_DIR/conf/rsyslog/rsyslog.conf" "CONSOLE"
+
+# ─── DNS Resolver for Targets ───────────────────────────────────────────────
 create_resolv
 
+# ─── Generate Console Service Certificate ───────────────────────────────────
+if [[ "$skip_tls" != true ]]; then
+  log console " 🔐 Generating TLS certificate for console.nfr.lab"
+  mkdir -p "$CA_DIR"  # ensure CA directory exists
 
-######################################################################
-# if TLS is used
-  if [[ "$skip_tls" != "true" ]]; then
-    create_service_cert "$CA_DIR" "console.nfr.lab" "$SUBNET.2"
+  # Note: we pass just “console” here so create_service_cert will append $DOMAIN
+  if create_service_cert "$CA_DIR" "console" "$SUBNET.2"; then
+    log silent "✔ Certificate for console.nfr.lab created"
+  else
+    log console "❌ Failed to generate certificate for console.nfr.lab"
+    exit 1
   fi
+else
+  log silent "⚠️  Skipping console certificate (TLS disabled)"
+fi
 
-# Add the console to docker-compose
-name="console_$SESSION_ID"
-add_hosts "console.nfr.lab" "$SUBNET.2"
-{
-  svc_hostname="console.nfr.lab"
-  echo "  console:"
-  echo "    image: unspecific/victim-v1-tiny:1.4"
-  echo "    container_name: $name"
-  echo "    hostname: $svc_hostname"
-  echo "    networks:"
-  echo "      $NETWORK:"
-  echo "        ipv4_address: $SUBNET.2"
-  echo "    environment:"
-  echo "      - SESSION_ID=$SESSION_ID"
-  echo "      - HOSTNAME=$svc_hostname"
-  echo "      - SERVICE=console"
-  if [[ "$skip_tls" != "true" ]]; then
-    echo "      - SSL_CERT_PATH=/etc/certs/$svc_hostname/$svc_hostname.crt"
-    echo "      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key"
-  fi
-  # now ot add te volumes
-  echo "    volumes:"
-  if [[ "$skip_tls" != "true" ]]; then
-    echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
-    echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.key:/etc/certs/$svc_hostname/$svc_hostname.key:ro"
-  fi
-  echo "      - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro"
-  echo "      - ${SESSION_DIR}/${CONF_DIR}/console//dnsmasq.conf:/etc/dnsmasq.conf:ro"
-  echo "      - ${SESSION_DIR}/${CONF_DIR}/nfr.lab.zone:/etc/nfr.lab.zone:ro"
-  echo "      - ${SESSION_DIR}/score_card:/etc/score_card:rw"
-  echo "      - ${SESSION_DIR}/mapping.txt:/etc/mapping.txt:rw"
-  echo "      - ${SESSION_DIR}/${TARGET_DIR}/score.json:/etc/score.json:rw"
-  echo "      - ${SYSLOG_FILE}:/var/log/containers:rw"
-  echo "      - ${SESSION_DIR}/${LOG_DIR}/tcpdump:/var/log/tcpdump:rw"
-  echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw"
-  echo "      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro"
-  echo "    expose:"
-  echo "      - \"514/udp\""
-  echo "      - \"53/udp\""
-  echo "      - \"514/tcp\""
-  echo "      - \"53/tcp\""
-  echo "      - \"80/tcp\""
-  echo "      - \"443/tcp\""
-  echo "    command: sh -c \"/opt/target/launch_target.sh; /bin/bash\""
-  echo "    restart: unless-stopped"
-} >> "$SESSION_DIR/$COMPOSE_FILE"
-echo "$name" >> "$SESSION_DIR/services.map"
-# add console.nfr.lab to local /etc/hosts to reach it by name.
-HOSTS="/etc/hosts"
+# ─── Add the console service to docker-compose ──────────────────────────────
+svc="console"
+container_name="${svc}_${SESSION_ID}"
+compose_file="$SESSION_DIR/$COMPOSE_FILE"
+services_map="$SESSION_DIR/services.map"
 
-# Loop through services
+# ensure the host entry exists
+add_hosts "${svc}.nfr.lab" "${SUBNET}.2"
+
+# append a nicely indented YAML block
+cat >> "$compose_file" <<EOF
+  ${svc}:
+    image: $(get_image_for_service ${svc})
+    container_name: ${container_name}
+    hostname: ${svc}.nfr.lab
+    networks:
+      ${NETWORK}:
+        ipv4_address: ${SUBNET}.2
+    environment:
+      - SESSION_ID=${SESSION_ID}
+      - HOSTNAME=${svc}.nfr.lab
+      - SERVICE=${svc}$( 
+        if [[ "$skip_tls" != true ]]; then
+          printf "\n      - SSL_CERT_PATH=/etc/certs/${svc}.nfr.lab/${svc}.nfr.lab.crt\n      - SSL_KEY_PATH=/etc/certs/${svc}.nfr.lab/${svc}.nfr.lab.key"
+        fi
+      )
+    volumes:
+      - ${SESSION_DIR}/${CONF_DIR}/certs/${svc}/${svc}.key:/etc/certs/${svc}.nfr.lab/${svc}.nfr.lab.key:ro
+      - ${SESSION_DIR}/${CONF_DIR}/certs/${svc}/${svc}.crt:/etc/certs/${svc}.nfr.lab/${svc}.nfr.lab.crt:ro
+      - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro
+      - ${SESSION_DIR}/${CONF_DIR}/console/dnsmasq.conf:/etc/dnsmasq.conf:ro
+      - ${ZONEFILE}:/etc/nfr.lab.zone:ro
+      - ${SESSION_DIR}/${SCORE_CARD}:/etc/score_card:rw
+      - ${SESSION_DIR}/mapping.txt:/etc/mapping.txt:rw
+      - ${SESSION_DIR}/${TARGET_DIR}/score.json:/etc/score.json:rw
+      - ${SYSLOG_FILE}:/var/log/containers:rw
+      - ${SESSION_DIR}/${LOG_DIR}/tcpdump:/var/log/tcpdump:rw
+      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw
+      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro
+    expose:
+      - "514/udp"
+      - "53/udp"
+      - "514/tcp"
+      - "53/tcp"
+      - "80/tcp"
+      - "443/tcp"
+    command: sh -c "/opt/target/launch_target.sh; /bin/bash"
+    restart: unless-stopped
+
+EOF
+
+# record it in services.map
+echo "${container_name}" >> "$services_map"
+log silent "✔ Added console service ($container_name) to Compose and services.map"
+
+# ─── Prepare victim services and mapping ─────────────────────────────────────
 declare -i lab_launch=0
 svc_count=1
-log silent "Time to prepare the victims"
+
+# initialize mapping.txt
+mapping_file="$SESSION_DIR/mapping.txt"
+cat > "$mapping_file" <<EOF
+# Service → Hostname / IP / Port / Proto / Flag for session $SESSION_ID
+EOF
+log silent "✔ Initialized mapping file: $mapping_file"
+
 for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
   ((lab_launch++))
-  log silent "Initialize the $svc service setup"
-  log silent "$svc uses ${services[$svc]}"
-  rand_ip=$(get_random_ip)
-  svc_hostname=$(get_unique_hostname)
-  echo "$rand_ip    $svc_hostname" >> "$ZONEFILE"
-  reversed_ip=$(echo "$rand_ip" | awk -F. '{print $4,$3,$2,$1}' OFS='.')
-  echo "ptr-record=${reversed_ip}.in-addr.arpa,$svc_hostname" >> "$ZONEFILE"
+  log silent "→ Initializing service: $svc"
 
+  # 1) Allocate IP & hostname
+  rand_ip=$(get_random_ip) || exit 1
+  svc_hostname=$(get_unique_hostname) || exit 1
+  add_zone_entry "$rand_ip" "$svc_hostname"
   echo "$svc,$svc_hostname" >> "$SESSION_DIR/hostnames.map"
-  ######################################################################
-  # if TLS is used
-  if [[ "$skip_tls" != "true" ]]; then
+
+  # 2) TLS cert if needed
+  if [[ "$skip_tls" != true ]]; then
     create_service_cert "$CA_DIR" "$svc_hostname" "$rand_ip"
   fi
-  ######################################################################
-  flag=$(generate_flag)
+
+  # 3) Flag, image, and container naming
+  flag=$(generate_flag "$svc")
   name="${svc}_host_${SESSION_ID}"
   image=$(get_image_for_service "$svc")
-  IFS=' ' read -ra ports <<< "${services[$svc]}"
+  # 4) Record to score_card (one line per port)
+  IFS=' ' read -ra ports <<<"${services[$svc]}"
   for port_proto in "${ports[@]}"; do
-    proto=$(cut -d':' -f1 <<< "$port_proto")
-    port=$(cut -d':' -f2 <<< "$port_proto")
-    tls=$(cut -d':' -f2 <<< "$port_proto")
-    log silent " ➕  Enabling $svc on $rand_ip → $proto/$port | Flag: $flag"
-    echo " ➕  Enabling Serice port #$svc_count"
-    echo "hostname= service= target= port= proto= flag=" >> "$SCORE_CARD"
-    ((svc_count++))
+    proto=${port_proto%%:*}
+    port=${port_proto#*:}
+    echo "hostname= service= target= port= proto= flag=" \
+      >> "$SESSION_DIR/$SCORE_CARD"
   done
-  
-  # Update the services.map
+
+  # 5) Record to mapping.txt
+  for port_proto in "${ports[@]}"; do
+    proto=${port_proto%%:*}
+    port=${port_proto#*:}
+    echo "$svc: Hostname=$svc_hostname IP=$rand_ip Port=$port Proto=$proto Flag=$flag" \
+      >> "$mapping_file"
+  done
+
   echo "$name" >> "$SESSION_DIR/services.map"
 
-  # we will generate a new username and password combination for each service.
+  # 6) Generate random credentials
   SESS_USER=$(get_vuser)
   SESS_PASS=$(get_vpass)
   SESS_COMMUNITY=$(get_vcommunity)
-  svcs="${services[$svc]}"
 
-  # Write to docker-compose.yml with proper indentation
-  {
-    echo "  $svc:"
-    echo "    image: $image"
-    echo "    container_name: $name"
-    echo "    hostname: $svc_hostname"
-    echo "    networks:"
-    echo "      $NETWORK:"
-    echo "        ipv4_address: $rand_ip"
-    echo "    expose:"
-    for port_proto in "${ports[@]}"; do
-      proto=$(cut -d':' -f1 <<< "$port_proto")
-      port=$(cut -d':' -f2 <<< "$port_proto")
-      echo "      - \"$port/$proto\""
-    done
-    # Add environment variables.  Easier to pass all of them to ever servce and let the launch_target script figure it out
-    echo "    environment:"
-    echo "      - SESSION_ID=$SESSION_ID"
-    echo "      - HOSTNAME=$svc_hostname"
-    echo "      - USERNAME=$SESS_USER"
-    echo "      - PASSWORD=$SESS_PASS"
-    echo "      - COMMUNITY=$SESS_COMMUNITY"
-    echo "      - FLAG=$flag"
-    echo "      - SERVICE=$svc"
-    echo "      - PORTS=$svcs"
-    if [[ "$skip_tls" != "true" ]]; then
-      echo "      - SSL_CERT_PATH=/etc/certs/$svc_hostname/$svc_hostname.crt"
-      echo "      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key"
-    fi
-    # now ot add te volumes
-    echo "    command: sh -c \"/opt/target/launch_target.sh; /bin/bash\""
-    echo "    volumes:"
-    if [[ "$skip_tls" != "true" ]]; then
-      echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.crt:/etc/certs/$svc_hostname/$svc_hostname.crt:ro"
-      echo "      - $SESSION_DIR/$CONF_DIR/certs/$svc_hostname/$svc_hostname.key:/etc/certs/$svc_hostname/$svc_hostname.key:ro"
-    fi
-    echo "      - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:ro"
-    echo "      - ${SESSION_DIR}/${TARGET_DIR}/conf/resolv.conf:/etc/resolv.conf"
-    echo "      - ${SESSION_DIR}/${LOG_DIR}/services:/var/log/services:rw"
-    echo "    logging:"
-    echo "      driver: syslog"
-    echo "      options:"
-    echo "        syslog-address: \"udp://${SUBNET}.2:514\"  # Your lab’s syslog server"
-    echo "        tag: \"{{.Name}}\""
-    echo "        syslog-format: rfc5424"
- 
-  } >> "$SESSION_DIR/$COMPOSE_FILE"
-
-  # Record service-specific mapping (IP, Port, Flag)
+  # 7) Append this service to docker-compose.yml
+  compose_file="$SESSION_DIR/$COMPOSE_FILE"
+  cat >> "$compose_file" <<EOF
+  $svc:
+    image: $image
+    container_name: $name
+    hostname: $svc_hostname
+    networks:
+      $NETWORK:
+        ipv4_address: $rand_ip
+    expose:
+EOF
   for port_proto in "${ports[@]}"; do
-    proto=$(cut -d':' -f1 <<< "$port_proto")
-    port=$(cut -d':' -f2 <<< "$port_proto")
-    echo "$svc: Hostname=$svc_hostname IP=$rand_ip Port=$port Proto=$proto Flag=$flag" >> "$SESSION_DIR/mapping.txt"
+    proto=${port_proto%%:*}
+    port=${port_proto#*:}
+    echo "      - \"$port/$proto\"" >> "$compose_file"
   done
+
+  cat >> "$compose_file" <<EOF
+    environment:
+      - SESSION_ID=$SESSION_ID
+      - HOSTNAME=$svc_hostname
+      - USERNAME=$SESS_USER
+      - PASSWORD=$SESS_PASS
+      - COMMUNITY=$SESS_COMMUNITY
+      - FLAG=$flag
+      - SERVICE=$svc
+      - PORTS=${services[$svc]}
+EOF
+  if [[ "$skip_tls" != true ]]; then
+    cat >> "$compose_file" <<EOF
+      - SSL_CERT_PATH=/etc/certs/$svc_hostname/$svc_hostname.crt
+      - SSL_KEY_PATH=/etc/certs/$svc_hostname/$svc_hostname.key
+EOF
+  fi
+
+  cat >> "$compose_file" <<EOF
+    command: sh -c "/opt/target/launch_target.sh; /bin/bash"
+    volumes:
+      - $SESSION_DIR/$TARGET_DIR:/opt/target:ro
+      - $SESSION_DIR/$TARGET_DIR/conf/resolv.conf:/etc/resolv.conf
+      - $SESSION_DIR/$LOG_DIR/services:/var/log/services:rw
+    logging:
+      driver: syslog
+      options:
+        syslog-address: "udp://${SUBNET}.2:514"
+        tag: "{{.Name}}"
+        syslog-format: rfc5424
+
+EOF
+
+  # 8) Stop if we've launched enough
   if (( NUM_SERVICES > 0 && lab_launch >= NUM_SERVICES )); then
-    # echo "$NUM_SERVICES Launched"
+    log silent "✔ Launched $lab_launch services (limit: $NUM_SERVICES)"
     break
   fi
 
+  ((svc_count++))
 done
-
-
-# Add network section to the end of docker-compose.yml
-cat >> "$SESSION_DIR/$COMPOSE_FILE" <<EOF
+# ─── Append network section ────────────────────────────────────────────────
+compose_file="$SESSION_DIR/$COMPOSE_FILE"
+cat >> "$compose_file" <<EOF
 networks:
   ${NETWORK}:
-     ipam:
-        config:
+    ipam:
+      config:
         - subnet: ${SUBNET}.0/24
           gateway: ${SUBNET}.254
 EOF
-log silent " Finished Creaeting ${SESSION_DIR}/${COMPOSE_FILE} "
+log silent "✔ Finished creating Compose file: $compose_file"
 
-
+# adjust svc_count (it was incremented once past the last)
 ((svc_count--))
 
+# ─── Set ownership on score card ───────────────────────────────────────────
 REAL_USER="${SUDO_USER:-$USER}"
-chown "$REAL_USER:$REAL_USER" "$SCORE_CARD"
-cp "$SCORE_CARD" "${SESSION_DIR}/"
+chown "${REAL_USER}:${REAL_USER}" "${SESSION_DIR}/${SCORE_CARD}"
+ln -sf "${SESSION_DIR}/${SCORE_CARD}" "$SCORE_CARD"
 
-if [[ $DO_NOT_RUN ]]; then
-  log silent " 🏁 DO NOT RUN MODE"
-  log console " 🏁  Confiured $lab_launch targets with $svc_count open ports"
-  log console " ⛔️  Dry run is complete."
-  log console " 🧠  You can start the docker containers with the following command"
-  log console "   \`docker compose -f \"${SESSION_DIR}/${COMPOSE_FILE}\" up -d\`"
+# ─── Dry-run support ───────────────────────────────────────────────────────
+if [[ "$dry_run" == true ]]; then
+  log silent " 🏁  Dry-run mode enabled"
+  log console " 🗂  Configured $lab_launch targets with $svc_count open ports"
+  log console " ⛔  Dry run complete. To start containers, run:"
+  log console "   ${COMPOSE_CMD} -f \"$compose_file\" up -d"
   echo
-  exit;
-else 
-  log console " 🚀  Launching $lab_launch targets with $svc_count open ports. Good Luck"
+  exit 0
+else
+  log console " 🚀  Launching $lab_launch targets with $svc_count open ports. Good luck!"
 fi
 
-# Launch the containers using docker-compose
-docker compose -f "$SESSION_DIR/$COMPOSE_FILE" up -d
-echo "labuser:labuser" | chpasswd &&
-# Log running containers
-log silent "✅ Final container map:"
-DOCKER_PS=$(docker ps --format "table {{.Names}}\t{{.Ports}}")
-log console "$DOCKER_PS"
+# ─── Launch containers ─────────────────────────────────────────────────────
+if ! $COMPOSE_CMD -f "$compose_file" up -d; then
+  log console " ❌ Failed to launch containers"
+  exit 1
+fi
 
-log console "Your Firing Range has been launched."
+# ─── Configure local labuser (if present) ──────────────────────────────────
+#if echo "labuser:labuser" | chpasswd; then
+#  log silent "✔ Updated 'labuser' password"
+#else
+#  log console " ⚠️  Could not update 'labuser' password"
+# fi
+
+# ─── Show running containers ────────────────────────────────────────────────
+log silent "✅ Final container list:"
+if DOCKER_PS=$($COMPOSE_CMD ps --format 'table {{.Names}}\t{{.Ports}}'); then
+  log silent "$DOCKER_PS"
+else
+  log silent "⚠️  Could not retrieve container list"
+fi
+
+log console " 🎉  Your Nmap Firing Range has been launched!"
 echo
 
+# ─── Report duration ───────────────────────────────────────────────────────
 duration=$SECONDS
-log console " ⏱️  Lab launched in $duration seconds"
-echo
+log console "⏱️  Lab launched in $duration seconds"

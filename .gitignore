@@ -6,3 +6,4 @@ score_card
 nfr_uninstall.log
 score_card
 docker-compose.yml
+logs/*

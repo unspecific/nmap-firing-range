@@ -354,7 +354,11 @@ setup_group_access() {
 
   # set ownership and permissions
   log console "🔧 Setting permissions for $INSTALL_DIR..."
-  chown -R root:"$NFR_GROUP" "$INSTALL_DIR"
+  if [[ $NO_GRP != "true" ]]; then
+    chown -R root:"$NFR_GROUP" "$INSTALL_DIR"
+  else 
+    chown -R root:nobody "$INSTALL_DIR"
+  fi
   find "$INSTALL_DIR" -type d -exec chmod 775 {} +
   find "$INSTALL_DIR" -type f -exec chmod 664 {} +
   find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 775 {} +
@@ -481,6 +485,7 @@ check_local() {
 
 # ─── Parse flags ─────────────────────────────────────────────────────
 while (( $# )); do
+  echo "Parse $1"
   case "$1" in
     --install-dir|--prefix)
       INSTALL_DIR="$2"
@@ -492,7 +497,14 @@ while (( $# )); do
     --unattended)     UNATTENDED=true; shift ;;
     --upgrade)        UPGRADE=true;    shift ;;
     --force)          FORCE=true;      shift ;;
-    *)                break           ;;
+    --*)  # any other long option is an error
+      echo "❌ Unknown option: $1" >&2
+      show_help
+      exit 1
+      ;;
+    -*)  # preserve single‐letter flags for getopts
+      break
+      ;;
   esac
 done
 
@@ -504,6 +516,14 @@ if [[ "$INSTALL_DIR_OVERRIDE" == true ]]; then
   LOG_DIR="$INSTALL_DIR/logs"
   LOGFILE="$LOG_DIR/setup.log"
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
+fi
+
+if getent group "$GROUP" >/dev/null 2>&1; then
+  log console " ✅  Group ‘$GROUP’ exists."
+else
+  log console " ❌  Group ‘$GROUP’ does not exist."
+  log console " Please make sure nmap firing randge is properly installed."
+  NO_GRP=true
 fi
 
 # ─── One-off commands ────────────────────────────────────────────────
@@ -626,6 +646,8 @@ log console "📁 Scripts installed to: $BIN_DIR"
 log console "📄 Symlinks (if created) are available in PATH directories."
 log console "📝 Setup log saved at: $LOGFILE"
 log console "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
-chgrp $NFR_GROUP $LOGFILE
+if [[ $NO_GRP != "true" ]]; then
+  chgrp $NFR_GROUP $LOGFILE
+fi
 chmod 664 $LOGFILE
 echo

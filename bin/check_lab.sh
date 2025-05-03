@@ -1,179 +1,173 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 
 APP="NFR-CheckLab"
-VERSION=2.0
+VERSION="2.0"
+USER_NAME="Lee 'MadHat' Heath <lheath@unspecific.com>"
+NAME_OVERRIDE=false
 
-echo
-echo " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
+# Auto-detect installation directory (parent of this script's directory)
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+INSTALL_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
 
+show_help() {
+    cat << EOF
+Usage: check_lab [OPTIONS] [SCORE_CARD_FILE]
 
-# -- Validate input file --
-if [[ $# -ne 1 ]]; then
-  SUBMISSION_FILE="score_card"
+Options:
+  --name NAME         Set the name displayed in the header (will be added to score_card)
+  --help, -h          Show this help message and exit
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --name)
+            USER_NAME="$2"
+            NAME_OVERRIDE=true
+            shift 2
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --*)
+            echo "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Determine submission file
+if [[ $# -eq 0 ]]; then
+    SUBMISSION_FILE="$INSTALL_DIR/score_card"
+elif [[ $# -eq 1 ]]; then
+    SUBMISSION_FILE="$1"
 else
-  SUBMISSION_FILE="$1"
+    echo "❌ Too many arguments."
+    show_help
+    exit 1
 fi
 
+# Header display
+echo
+echo " 🎩  $APP v$VERSION - $USER_NAME"
 
-if [[ ! -f "$SUBMISSION_FILE" ]]; then
-  echo "❌ ScoreCard file not found: $SUBMISSION_FILE"
-  echo 
-  echo "Usage: check_lab <SCORE_CARD>"
-  echo " <SCORE_CARD> is generated in the \$PWD when launch_lab is run."
-  echo " The score_card format can be seen on GitHub. The score_card includes"
-  echo " a SESSION_ID, and your submissions for the targets you have found."
-  echo " by defaut it looks for './score_card' or you can pass it the name of the scroe card file."
-  echo
-  echo "   Please specify the score_card file you wish to use if there is not './score_card'."
-  exit 1;
+# Validate submission file
+if [[ ! -e "$SUBMISSION_FILE" ]]; then
+    echo "❌ ScoreCard file not found: $SUBMISSION_FILE"
+    echo
+    show_help
+    exit 1
 fi
 
-# -- Extract session ID from submission file --
+# Extract session ID and optional name from score_card
 SESSION_ID=$(grep -m 1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2)
-
 if [[ -z "$SESSION_ID" ]]; then
-  echo "❌   No session ID found in submission file."
-  exit 1
+    echo "❌   No session ID found in submission file."
+    exit 1
+fi
+SAVED_NAME=$(grep -m 1 '^# Name:' "$SUBMISSION_FILE" | cut -d':' -f2- | xargs)
+
+# Prepend name/session header to score_card when overridden
+if [[ "$NAME_OVERRIDE" == true ]]; then
+    TMPFILE=$(mktemp)
+    {
+        echo "# Name: $USER_NAME"
+        echo "# Session: $SESSION_ID"
+        echo
+        cat "$SUBMISSION_FILE"
+    } > "$TMPFILE" && mv "$TMPFILE" "$SUBMISSION_FILE"
+    echo "ℹ️  Updated $SUBMISSION_FILE with name and session header"
+    SAVED_NAME="$USER_NAME"
 fi
 
-# -- Set path to ground-truth file based on session --
-LAB_DIR="/opt/firing-range"
+# Set paths for ground truth
 LOG_DIR="logs"
-SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
+SESSION_DIR="$INSTALL_DIR/$LOG_DIR/lab_$SESSION_ID"
 GROUND_TRUTH="$SESSION_DIR/mapping.txt"
-
 if [[ ! -f "$GROUND_TRUTH" ]]; then
-  echo "❌  Ground truth file not found: $GROUND_TRUTH"
-  exit 1
+    echo "❌  Ground truth file not found: $GROUND_TRUTH"
+    exit 1
 fi
+
 echo "✅ SESSION_ID: $SESSION_ID - Scoring session started"
 echo "---------------------------"
 
-# -- Load ground truth into associative array --
+# Load ground truth into associative array
 declare -A truth_map
-
-while read -r line; do
-  svc=$(echo "$line" | cut -d':' -f1)
-  hostname=$(echo "$line" | grep -oP 'Hostname=\K\S+')
-  ip=$(echo "$line" | grep -oP 'IP=\K\S+')
-  port=$(echo "$line" | grep -oP 'Port=\K\S+')
-  proto=$(echo "$line" | grep -oP 'Proto=\K\S+')
-  flag=$(echo "$line" | grep -oP 'Flag=\K\S+')
-  key="${hostname}_${svc}_${ip}_${port}_${proto}"
-  truth_map["$key"]="$flag"
+while IFS= read -r line; do
+    svc="${line%%:*}"
+    hostname=$(grep -oP 'Hostname=\K\S+' <<< "$line")
+    ip=$(grep -oP 'IP=\K\S+' <<< "$line")
+    port=$(grep -oP 'Port=\K\S+' <<< "$line")
+    proto=$(grep -oP 'Proto=\K\S+' <<< "$line")
+    flag=$(grep -oP 'Flag=\K\S+' <<< "$line")
+    key="${hostname}_${svc}_${ip}_${port}_${proto}"
+    truth_map["$key"]="$flag"
 done < "$GROUND_TRUTH"
 
-# declare -p truth_map
-
-# -- Score the submission file --
-score=0
-correct=0
-wrong=0
-target_count=0
-
-while read -r line; do
-  # Skip blank or comment lines
-  [[ -z "$line" || "$line" =~ ^# ]] && continue
-  # We don't need the session ID here
-  if [[ "$line" == session=* ]]; then
-    # echo "📘 $line"
-    continue
-  fi
-
-  # 
-  ((target_count++))
-
-  hostname=$(echo "$line" | grep -oP 'hostname=\K\S+')
-  service=$(echo "$line" | grep -oP 'service=\K\S+')
-  proto=$(echo "$line" | grep -oP 'proto=\K\S+')
-  ip=$(echo "$line" | grep -oP 'target=\K\S+')
-  port=$(echo "$line" | grep -oP 'port=\K\S+')
-  flag=$(echo "$line" | grep -oP 'flag=\K\S+')
-  if [[ -z "$hostnmae" ]]; then
-    echo "✅ Checking entry #${target_count}"
-  else
-    echo "✅ Checking $hostname"
-  fi
-  if [[ !$hostname && !$service && !$flag && !$proto && !$ip && !$port ]]; then
-    echo " ❗ Empty entry"
-    continue
-  fi
-  key="${hostname}_${service}_${ip}_${port}_${proto}"
-  correct_flag="${truth_map[$key]}"
-
-  for k in "${!truth_map[@]}"; do
-    svc_hostname=$(cut -d'_' -f1 <<< "$k")
-    svc_service=$(cut -d'_' -f2 <<< "$k")
-    svc_ip=$(cut -d'_' -f3 <<< "$k")
-    svc_port=$(cut -d'_' -f4 <<< "$k")
-    svc_proto=$(cut -d'_' -f5 <<< "$k")
-    svc_flag="${truth_map[$k]}"
-
-    for field in hostname ip port service protocol flag; do
-      submitted_val="${!field}"        # e.g., $hostname
-      correct_val="${!svc_$field}"     # e.g., $svc_hostname
-
-      if [[ -z "$submitted_val" ]]; then
-        continue  # skip blank entries
-      elif [[ "$submitted_val" == "$correct_val" ]]; then
-        ((correct++))
-        ((score++))
-      else
-        ((wrong++))
-        ((score--))
-      fi
-    done
-
-   if [[ "$hostname" == "$svc_hostname" && "$ip" == "$svc_ip" && "$port" == "$svc_port" && "$proto" == "$svc_proto" && "$flag" == "$svc_flag" && "$service" != "$svc_service" ]]; then
-      echo "✅ $service $ip:$port:$proto → Perfect Entry (+5 bonus points)"
-      ((score+=5))
-      ((correct+=5))
+# Score the submission
+score=0; correct=0; wrong=0; target_count=0
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    [[ "$line" == session=* ]] && continue
+    ((target_count++))
+    hostname=$(grep -oP 'hostname=\K\S+' <<< "$line")
+    service=$(grep -oP 'service=\K\S+' <<< "$line")
+    ip=$(grep -oP 'target=\K\S+' <<< "$line")
+    port=$(grep -oP 'port=\K\S+' <<< "$line")
+    proto=$(grep -oP 'proto=\K\S+' <<< "$line")
+    flag=$(grep -oP 'flag=\K\S+' <<< "$line")
+    echo "✅ Checking ${hostname:-entry #$target_count}"
+    key="${hostname}_${service}_${ip}_${port}_${proto}"
+    correct_flag="${truth_map[$key]}"
+    if [[ "$flag" == "$correct_flag" ]]; then
+        ((correct++)); ((score++))
+    else
+        ((wrong++)); ((score--))
     fi
-  done 
 done < "$SUBMISSION_FILE"
 
-# -- Final score summary --
 echo "---------------------------"
+# Print saved name if present
+if [[ -n "$SAVED_NAME" ]]; then
+    echo "👤 Name: $SAVED_NAME"
+fi
 echo "🧮 Score: $score"
 echo "✔️  Correct: $correct"
 echo "❌ Incorrect: $wrong"
 
-# -- Identify missed services (not reported by user) --
+# Identify missed services
 declare -A submitted_services
-
-# Re-read the submission file to track what they attempted
-while read -r line; do
-  [[ -z "$line" || "$line" =~ ^# || "$line" == session=* ]] && continue
-
-  hostname=$(echo "$line" | grep -oP 'hostname=\K\S+')
-  ip=$(echo "$line" | grep -oP 'target=\K\S+')
-  port=$(echo "$line" | grep -oP 'port=\K\S+')
-  proto=$(echo "$line" | grep -oP 'proto=\K\S+')
-  service=$(echo "$line" | grep -oP 'service=\K\S+')
-
-  key="${hostname}_${ip}_${port}_${proto}"
-  submitted_services["$key"]=1
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" =~ ^# || "$line" == session=* ]] && continue
+    hostname=$(grep -oP 'hostname=\K\S+' <<< "$line")
+    ip=$(grep -oP 'target=\K\S+' <<< "$line")
+    port=$(grep -oP 'port=\K\S+' <<< "$line")
+    proto=$(grep -oP 'proto=\K\S+' <<< "$line")
+    key="${hostname}_${ip}_${port}_${proto}"
+    submitted_services["$key"]=1
 done < "$SUBMISSION_FILE"
 
-# Check against ground truth
 echo "🕵️  Missed services:"
 missed_any=0
 for k in "${!truth_map[@]}"; do
-  hostname=$(cut -d'_' -f1 <<< "$k")
-  ip=$(cut -d'_' -f3 <<< "$k")
-  port=$(cut -d'_' -f4 <<< "$k")
-  proto=$(cut -d'_' -f5 <<< "$k")
-  lookup_key="${hostname}_${ip}_${port}_${proto}"
-
-  if [[ -z "${submitted_services[$lookup_key]}" ]]; then
-    echo "- ❗ $hostname ($ip:$port:$proto) was not reported"
-    missed_any=1
-  fi
+    hostname="${k%%_*}"
+    ip="$(cut -d'_' -f3 <<< "$k")"
+    port="$(cut -d'_' -f4 <<< "$k")"
+    proto="$(cut -d'_' -f5 <<< "$k")"
+    lookup_key="${hostname}_${ip}_${port}_${proto}"
+    if [[ -z "${submitted_services[$lookup_key]}" ]]; then
+        echo "- ❗ $hostname ($ip:$port:$proto) was not reported"
+        missed_any=1
+    fi
 done
 
-if [[ "$missed_any" -eq 0 ]]; then
-  echo "- 🎯 All services were attempted!"
-fi
+[[ $missed_any -eq 0 ]] && echo "- 🎯 All services were attempted!"
 echo
-exit
+exit 0
