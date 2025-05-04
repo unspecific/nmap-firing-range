@@ -587,7 +587,7 @@ INSTALL_MODE=""
 log console "  Checking for existing installation in $INSTALL_DIR"
 if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true && "$SKIP_GH" != true ]]; then
   log console " 🚧  Installation found at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true]]; then
+  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true ]]; then
     log console " ✅  Unattended mode: can't install.\r\nUse --force to update existing install"
     exit 1
   else
@@ -596,7 +596,6 @@ if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true && "$SKIP_GH" !
   fi
 fi
 
-# 2) Local staging install? If not updating, check for local scripts
 log console "  Checking for install files $(pwd)"
 if [[ $UPGRADE != "true" ]] && check_local staged; then
   log console " 🚧  Found staged files to install."
@@ -613,14 +612,9 @@ fi
 
 if [[ -z $INSTALL_MODE ]]; then
     read -rp "Do you want to install from GutHub (y/n): " resp
-    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="github"
-else 
-  log console "Said no to local and GitHub Install"
-  exit 1
+    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="github" || log console "no install source chosen" && exit 1
 fi
 
-
-# 6) Execute mode
 case "$INSTALL_MODE" in
   local)
     log console "🚀 Installing from local scripts..."

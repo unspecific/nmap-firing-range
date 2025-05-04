@@ -1154,6 +1154,7 @@ EOF
   for port_proto in "${ports[@]}"; do
     read -r proto port tls <<< "$(awk -F ':' '{print $1, $2, $3}' <<< "$port_proto")"
     echo "      - \"$port/$proto\"" >> "$compose_file"
+    ((svc_count++))
   done
 
   cat >> "$compose_file" <<EOF
@@ -1195,7 +1196,6 @@ EOF
     break
   fi
 
-  ((svc_count++))
 done
 # ─── Append network section ────────────────────────────────────────────────
 compose_file="$SESSION_DIR/$COMPOSE_FILE"
@@ -1237,21 +1237,19 @@ else
 fi
 
 # ─── Launch containers ─────────────────────────────────────────────────────
-if ! $COMPOSE_CMD -f "$compose_file" up -d; then
+if RAW=$(! $COMPOSE_CMD -f "$compose_file" up -d 2>&1); then
   log console " ❌ Failed to launch containers"
   exit 1
+else
+  FILTERED=$(printf '%s\n' "$RAW" | \
+  sed -E 's/(Container )[^\s_]+_host/\1****_host/g')
+  log console $FILTERED
 fi
 
-# ─── Configure local labuser (if present) ──────────────────────────────────
-#if echo "labuser:labuser" | chpasswd; then
-#  log silent "✔ Updated 'labuser' password"
-#else
-#  log console " ⚠️  Could not update 'labuser' password"
-# fi
 
 # ─── Show running containers ────────────────────────────────────────────────
 log silent "✅ Final container list:"
-if DOCKER_PS=$($COMPOSE_CMD ps --format 'table {{.Names}}\t{{.Ports}}'); then
+if DOCKER_PS=$($COMPOSE_CMD ps --format 'table {{.Names}}\t{{.Ports}}' 2>&1); then
   log silent "$DOCKER_PS"
 else
   log silent "⚠️  Could not retrieve container list"
