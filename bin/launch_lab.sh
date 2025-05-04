@@ -1156,6 +1156,8 @@ for svc in $(printf "%s\n" "${!services[@]}" | shuf); do
     expose:
 EOF
   for port_proto in "${ports[@]}"; do
+    port_proto="${port_proto%\"}"
+    port_proto="${port_proto#\"}"
     read -r proto port tls <<< "$(awk -F ':' '{print $1, $2, $3}' <<< "$port_proto")"
     echo "      - \"$port/$proto\"" >> "$compose_file"
     ((svc_count++))
