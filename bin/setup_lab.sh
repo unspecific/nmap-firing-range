@@ -671,6 +671,15 @@ if [[ -z "$INSTALL_MODE" ]]; then
         exit 1
       fi
     fi
+  else
+    log console "🌐  Unattended mode: Can't find local files. $(pwd)"
+    read -rp "Install from GitHub? (y/n): " resp
+    if [[ "$resp" =~ ^[Yy]$ ]]; then
+      INSTALL_MODE="github"
+    else
+      log console "❌  Installation aborted."
+      exit 1
+    fi
   fi
 fi
 
