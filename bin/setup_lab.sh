@@ -579,7 +579,6 @@ if getent group "$NFR_GROUP" >/dev/null 2>&1; then
   log console " ✅  Group ‘$NFR_GROUP’ exists."
 else
   log console " ❌  Group ‘$NFR_GROUP’ does not exist."
-  log console " Please make sure nmap firing range is properly installed."
   NO_GRP=true
 fi
 
@@ -613,14 +612,11 @@ INSTALL_MODE=""
 
 # 1) Check for an existing install
 log console "Checking for existing installation in $INSTALL_DIR..."
-if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true ]]; then
+if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
   log console "🚧  Installation detected at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true && "$FORCE" != true ]]; then
+  if [[ "$UNATTENDED" == true]]; then
     log console "✅  Unattended mode: skipping install (existing install). Use --force to overwrite."
     exit 0
-  elif [[ "$UNATTENDED" == true && "$FORCE" == true ]]; then
-    log console "Instaling from local source with FORCE"
-    INSTALL_MODE="local"
   else 
     read -rp "Update existing installation? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
@@ -634,7 +630,7 @@ fi
 
 # 2) Check for staged local install files
 log console "Checking for local install files in $(pwd)..."
-if [[ "$UPGRADE" != true && "$INSTALL_MODE" == "local" ]] && check_local staged; then
+if [[ "$INSTALL_MODE" == "local" ]] && check_local staged; then
   log console "📁  Staged install files found."
   if [[ "$UNATTENDED" == true ]]; then
     INSTALL_MODE="local"
@@ -653,11 +649,11 @@ fi
 
 # 4) Final fallback for GitHub install
 if [[ -z "$INSTALL_MODE" ]]; then
-  if [[ "$UNATTENDED" == true ]]; then
-    INSTALL_MODE="github"
-    log console "🌐  Unattended mode: defaulting to GitHub install."
+  if [[ "$UNATTENDED" == true ]] && check_local staged; then
+    INSTALL_MODE="local"
+    log console "🌐  Unattended mode: defaulting to local install."
   else
-    read -rp "No install mode selected. Install from GitHub? (y/n): " resp
+    read -rp "Install from GitHub? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
       INSTALL_MODE="github"
     else
