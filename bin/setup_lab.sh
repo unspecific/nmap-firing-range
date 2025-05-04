@@ -451,7 +451,7 @@ uninstall() {
   CONF_DIR="$INSTALL_DIR/conf"
   TARGET_DIR="$INSTALL_DIR/target"
   LOG_DIR="$INSTALL_DIR/logs"
-  LOGFILE="$LOG_DIR/setup.log"
+  LOGFILE="./setup.log"
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
 
   log console "🗑  Uninstalling Firing Range from $INSTALL_DIR…"

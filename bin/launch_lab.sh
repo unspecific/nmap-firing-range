@@ -221,7 +221,7 @@ check_dependencies() {
   fi
 
   # 5) Script file sanity check
-  local script_file="$BIN_DIR/launch_lab.sh"
+  local script_file="$INSTALL_DIR/$BIN_DIR/launch_lab.sh"
   if [[ ! -f "$script_file" ]]; then
     log console " ❌  $script_file not found! Please ensure NFR is installed properly."
     log console " 👉  It is recommended to run setup_lab to verify dependencies and set up the environment."
