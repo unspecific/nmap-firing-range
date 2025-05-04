@@ -624,7 +624,7 @@ if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
   else 
     read -rp "Update existing installation? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
-      INSTALL_MODE="local"
+      : # INSTALL_MODE="local"
     else
       log console "⚠️  Update cancelled by user."
       exit 0
@@ -656,14 +656,20 @@ if [[ -z "$INSTALL_MODE" ]]; then
   if [[ "$UNATTENDED" == true ]] && check_local staged; then
     INSTALL_MODE="local"
     log console "🌐  Unattended mode: defaulting to local install."
-  else
-    log console "🌐  Unattended mode: Can't find local files. $(pwd)"
-    read -rp "Install from GitHub? (y/n): " resp
+  elif check_local staged; then
+    log console " 🌐  "
+    read -rp "Install from local source? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
-      INSTALL_MODE="github"
+      INSTALL_MODE="local"
     else
-      log console "❌  Installation aborted."
-      exit 1
+      log console "🌐  Unattended mode: Can't find local files. $(pwd)"
+      read -rp "Install from GitHub? (y/n): " resp
+      if [[ "$resp" =~ ^[Yy]$ ]]; then
+        INSTALL_MODE="github"
+      else
+        log console "❌  Installation aborted."
+        exit 1
+      fi
     fi
   fi
 fi
