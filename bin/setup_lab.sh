@@ -266,13 +266,21 @@ create_symlinks() {
 
 # ─── This would be an Update routine ─────────────────────────────────
 install_from_github() {
-  clone_dir=$(mktemp -d -t nfr-XXXX)
+  # Create a temp clone dir
+  clone_dir=$(mktemp -d -t nfr-XXXX) || {
+    log console "❌ Failed to create temp dir"
+    exit 1
+  }
+
   log console "🔄 Cloning into $clone_dir…"
   git clone --depth=1 "$REPO_URL" "$clone_dir" || {
-    log console "❌ Git clone failed"; exit 1
+    log console "❌ Git clone failed"
+    exit 1
   }
+
   log console "♻️ Relaunching installer from fresh clone…"
-  exec "$clone_dir/setup_lab.sh" --skip-update "$@"
+  # Notice the /bin/ prefix here
+  exec bash "$clone_dir/bin/setup_lab.sh" --skip-update "$@"
 }
 
 # ─── Rollback on error only ───────────────────────────────────────────
