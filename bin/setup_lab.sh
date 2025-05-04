@@ -542,7 +542,7 @@ check_local() {
 
 # ─── Parse flags ─────────────────────────────────────────────────────
 while (( $# )); do
-  echo "Parse $1"
+  # echo "Parse $1"
   case "$1" in
     --install-dir|--prefix)
       INSTALL_DIR="$2"
@@ -616,7 +616,7 @@ log console "Checking for existing installation in $INSTALL_DIR..."
 if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true ]]; then
   log console "🚧  Installation detected at $INSTALL_DIR."
   if [[ "$UNATTENDED" == true && "$FORCE" != true ]]; then
-    log console "✅  Unattended mode: skipping install (existing present). Use --force to override."
+    log console "✅  Unattended mode: skipping install (existing install). Use --force to overwrite."
     exit 0
   elif [[ "$UNATTENDED" == true && "$FORCE" == true ]]; then
     log console "Instaling from local source with FORCE"
@@ -634,7 +634,7 @@ fi
 
 # 2) Check for staged local install files
 log console "Checking for local install files in $(pwd)..."
-if [[ "$UPGRADE" != true && -z "$INSTALL_MODE" ]] && check_local staged; then
+if [[ "$UPGRADE" != true && "$INSTALL_MODE" == "local" ]] && check_local staged; then
   log console "📁  Staged install files found."
   if [[ "$UNATTENDED" == true ]]; then
     INSTALL_MODE="local"
