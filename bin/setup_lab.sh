@@ -502,14 +502,18 @@ uninstall() {
   exit 0
 }
 
-# ─── Where can we install from ─────────────────────────────────
-# $1 = mode: “installed” or “staged”
-# $2 = optional dir–falls back to global INSTALL_DIR
+# ─── check_local Utility Function ─────────────────────────────────────────
+# Usage: check_local <mode> [directory]
+# Modes:
+#   installed - verify an existing install in INSTALL_DIR or provided dir
+#   staged    - verify local repo scripts based on script location
 check_local() {
   local mode="$1"
   local dir
+
+  # For 'staged', use the script's own repo root rather than PWD
   if [[ "$mode" == "staged" ]]; then
-    dir="$(pwd)"
+    dir="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
   else
     dir="${2:-$INSTALL_DIR}"
   fi
@@ -523,7 +527,7 @@ check_local() {
       ([[ -d "$dir/target/conf" ]] || [[ -d "$dir/target/services" ]])
       ;;
     staged)
-      # Staged if all scripts in SCRIPTS array are present and executable
+      # Staged if all scripts in SCRIPTS array exist under repo/bin
       for script in "${SCRIPTS[@]}"; do
         if [[ ! -x "$dir/bin/$script" ]]; then
           return 1
