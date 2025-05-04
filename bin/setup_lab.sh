@@ -37,6 +37,7 @@ FORCE=false
 UNINSTALL=false
 UPGRADE=false
 NO_GRP=false
+SKIP_GH=false
 AUTO_CONFIRM=${AUTO_CONFIRM:-false}
 UNATTENDED=${UNATTENDED:-false}
 DEBUG=${DEBUG:-false}
@@ -519,6 +520,7 @@ while (( $# )); do
       ;;
     --help|-h)        show_help ;;
     --uninstall)      UNINSTALL=true; shift ;;
+    --skip-upgrade)   SKIP_GH=true; shift ;;
     --unattended)     UNATTENDED=true; shift ;;
     --upgrade)        UPGRADE=true;    shift ;;
     --force)          FORCE=true;      shift ;;
@@ -579,24 +581,26 @@ log console "🚀 Starting $APP v$VERSION..."
 # ─── Installation Decision Logic ─────────────────────────────────────────
 INSTALL_MODE=""
 
+
+
 # 1) Existing installation? Prompt to update
 log console "  Checking for existing installation in $INSTALL_DIR"
-if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
+if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true && "$SKIP_GH" != true ]]; then
   log console " 🚧  Installation found at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true ]]; then
-    INSTALL_MODE="update"
-    log console " ✅  Unattended mode: updating installation."
+  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true]]; then
+    log console " ✅  Unattended mode: can't install.\r\nUse --force to update existing install"
+    exit 1
   else
     read -rp "Update existing installation? (y/n): " resp
-    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="update" || log console " ⚠️  Skipping update."
+    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="local" || log console " ⚠️  User does not want to update." && exit 1 
   fi
 fi
 
 # 2) Local staging install? If not updating, check for local scripts
 log console "  Checking for install files $(pwd)"
-if [[ -z "$INSTALL_MODE" ]] && check_local staged; then
+if [[ $UPGRADE != "true" ]] && check_local staged; then
   log console " 🚧  Found staged files to install."
-  if [[ "$UNATTENDED" == true ]]; then
+  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true ]]; then
     INSTALL_MODE="local"
     log console " 📁  Unattended mode: installing from local scripts."
   else
@@ -605,38 +609,19 @@ if [[ -z "$INSTALL_MODE" ]] && check_local staged; then
   fi
 fi
 
-# 3) Flags override
-[[ "$*" == *"--force"* ]] && INSTALL_MODE="github" && log console "🔄 --force: will fetch from GitHub."
-[[ "$*" == *"--skip-update"* ]] && INSTALL_MODE="local" && log console "📁 --skip-update: forcing local install."
+[[ "$SKIP_GH" == true ]]  && INSTALL_MODE=local
 
-# 4) Unattended fallback
-if [[ -z "$INSTALL_MODE" ]] && [[ "$UNATTENDED" == true ]]; then
-  if check_local staged; then
-    INSTALL_MODE="local"
-    log console "📁 --unattended: installing from local scripts."
-  else
-    INSTALL_MODE="github"
-    log console " 🌐  Unattended mode: no local scripts → fetching from GitHub."
-  fi
+if [[ -z $INSTALL_MODE ]]; then
+    read -rp "Do you want to install from GutHub (y/n): " resp
+    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="github"
+else 
+  log console "Said no to local and GitHub Install"
+  exit 1
 fi
 
-# 5) Interactive GitHub prompt if still unset
-if [[ -z "$INSTALL_MODE" ]]; then
-  read -rp "No install mode selected. Fetch from GitHub? (y/n): " resp
-  if [[ "$resp" =~ ^[Yy]$ ]]; then
-    INSTALL_MODE="github"
-  else
-    log console "❌ Installation aborted."
-    exit 1
-  fi
-fi
 
 # 6) Execute mode
 case "$INSTALL_MODE" in
-  update)
-    log console "🔄 Updating existing installation..."
-    # update logic here
-    ;;
   local)
     log console "🚀 Installing from local scripts..."
     # local install logic here

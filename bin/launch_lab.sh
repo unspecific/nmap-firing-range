@@ -1209,6 +1209,13 @@ networks:
 EOF
 log silent "✔ Finished creating Compose file: $compose_file"
 
+if docker compose -f "$compose_file" config --quiet; then
+  log console "✅ Docker-Compose config valid, launching stack…"
+else
+  log console "❌ Docker-Compose config is invalid – aborting!"
+  exit 1
+fi
+
 # adjust svc_count (it was incremented once past the last)
 ((svc_count--))
 
