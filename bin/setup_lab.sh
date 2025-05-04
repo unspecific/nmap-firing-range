@@ -36,7 +36,7 @@ INSTALL_DIR_OVERRIDE=false
 FORCE=false
 UNINSTALL=false
 UPGRADE=false
-NO_GRP=false
+NO_GRP=true
 SKIP_GH=false
 AUTO_CONFIRM=${AUTO_CONFIRM:-false}
 UNATTENDED=${UNATTENDED:-false}
@@ -575,12 +575,12 @@ if [[ "$INSTALL_DIR_OVERRIDE" == true ]]; then
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
 fi
 
-if getent group "$NFR_GROUP" >/dev/null 2>&1; then
-  log console " ✅  Group ‘$NFR_GROUP’ exists."
-else
-  log console " ❌  Group ‘$NFR_GROUP’ does not exist."
-  NO_GRP=true
-fi
+# if getent group "$NFR_GROUP" >/dev/null 2>&1; then
+#  log console " ✅  Group ‘$NFR_GROUP’ exists."
+# else
+#  log console " ❌  Group ‘$NFR_GROUP’ does not exist."
+#  NO_GRP=true
+# fi
 
 # ─── One-off commands ────────────────────────────────────────────────
 if [[ "$UNINSTALL" == true ]]; then
@@ -653,6 +653,7 @@ if [[ -z "$INSTALL_MODE" ]]; then
     INSTALL_MODE="local"
     log console "🌐  Unattended mode: defaulting to local install."
   else
+    log console "🌐  Unattended mode: Can't find local files. $(pwd)"
     read -rp "Install from GitHub? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
       INSTALL_MODE="github"
