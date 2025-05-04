@@ -1,0 +1,6 @@
+# 🎩 Nmap Firing Range ScoreCard - Lee 'MadHat' Heath <lheath@unspecific.com>
+#    Started on lheath-tp.concordservicing.com at 2025-05-04_14-16-13
+session=62098275
+# hostname=<service_name> service=<service> target=<target_ip> port=<port> proto=<protocol> flag=<flag>
+hostname= service= target= port= proto= flag=
+hostname= service= target= port= proto= flag=
