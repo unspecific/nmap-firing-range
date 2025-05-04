@@ -8,7 +8,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 APP="NFR Cleanup"
-VERSION="2.0"
+VERSION="2.2.9"
 LOG_DIR="logs"
 BIN_DIR="bin"
 

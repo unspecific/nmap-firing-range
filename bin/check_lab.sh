@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 APP="NFR-CheckLab"
-VERSION="2.0"
+VERSION="2.2.9"
 USER_NAME="Lee 'MadHat' Heath <lheath@unspecific.com>"
 NAME_OVERRIDE=false
 

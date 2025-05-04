@@ -20,7 +20,7 @@ INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
 ### CONFIG ###
 APP="Nmap Firing Range (NFR) Launcher"
 APP_SHORT="NFR Launcher"
-VERSION="2.2.01"
+VERSION="2.2.9"
 
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
@@ -65,7 +65,7 @@ log() {
 
   # console output when requested
   if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
-    echo "$message" >&2
+    echo -e "$message" >&2
   fi
 
   # finally append
@@ -546,6 +546,8 @@ load_emulated_services() {
   fi
 }
 
+# ─── parse_meta_var ─────────────────────────────────────────────────────────
+# Reads VAR from a simple KEY=VALUE file, preserves embedded spaces
 parse_meta_var() {
   local file="$1" var="$2" line value
 
@@ -555,30 +557,32 @@ parse_meta_var() {
     return 1
   fi
 
-  # 2) Grab the last matching line
-  #    Allow optional whitespace before var name
-  if ! line=$(grep -E "^[[:space:]]*${var}=" "$file" | tail -n1); then
-    log silent "⚠ No $var= entry in $file"
-    echo ""
+  # 2) Grab the last matching line, allow whitespace around “=”
+  if ! line=$(grep -E "^[[:space:]]*${var}[[:space:]]*=" "$file" | tail -n1); then
+    log silent "⚠️  No ${var}= entry in $file"
+    printf '\n'
     return 0
   fi
 
-  # 3) Strip VAR= prefix
-  value=${line#*=}
+  # 3) Strip everything up to the first “=”
+  value="${line#*=}"
 
   # 4) Remove inline comments
-  value=${value%%#*}
+  value="${value%%#*}"
 
-  # 5) Remove surrounding quotes (single or double)
-  value=${value#\"}; value=${value%\"}
-  value=${value#"\'"}; value=${value%"\'"}
+  # 5) Remove surrounding single or double quotes
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
 
-  # 6) Trim any leading/trailing whitespace
-  value=$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  # 6) Trim leading/trailing whitespace
+  value="$(printf '%s' "$value" \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
-  echo "$value"
+  # 7) Emit exactly what remains (spaces intact)
+  printf '%s\n' "$value"
 }
-
 
 check_service() {
   local svc="$1"
@@ -1237,15 +1241,17 @@ else
 fi
 
 # ─── Launch containers ─────────────────────────────────────────────────────
-if RAW=$(! $COMPOSE_CMD -f "$compose_file" up -d 2>&1); then
-  log console " ❌ Failed to launch containers"
+if ! $COMPOSE_CMD -f "$compose_file" create >/dev/null 2>&1; then
+  log console "❌  Failed to create the containers"
   exit 1
-else
-  FILTERED=$(printf '%s\n' "$RAW" | \
-  sed -E 's/(Container )[^\s_]+_host/\1****_host/g')
-  log console $FILTERED
 fi
 
+if ! $COMPOSE_CMD -f "$compose_file" start >/dev/null 2>&1; then
+  log console "❌  Failed to start the containers"
+  exit 1
+fi
+
+log console "**** Targets have been launched. ****\r\n    **** The range is hot. ****"
 
 # ─── Show running containers ────────────────────────────────────────────────
 log silent "✅ Final container list:"
@@ -1255,7 +1261,7 @@ else
   log silent "⚠️  Could not retrieve container list"
 fi
 
-log console " 🎉  Your Nmap Firing Range has been launched!"
+log console " 🎉  Your Nmap Firing Range is ready for testing!"
 echo
 
 # ─── Report duration ───────────────────────────────────────────────────────

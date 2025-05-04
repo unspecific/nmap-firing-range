@@ -5,7 +5,7 @@ set -euo pipefail -o errtrace
 trap 'cleanup; exit 1' ERR
 
 APP="NFR-SetupLab"
-VERSION="2.2"
+VERSION="2.2.9"
 
 # ─── Elevate to root if needed ────────────────────────────────────────
 if [[ "$EUID" -ne 0 ]]; then
@@ -199,6 +199,22 @@ install_scripts() {
 
 create_symlinks() {
   local auto_link=false
+  local all_present=true
+
+  log silent "checking for existing links"
+  for script in "${SCRIPTS[@]}"; do
+    cmd="${script%.sh}"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      all_present=false
+      break
+    fi
+  done
+
+  if [[ "$all_present" == true ]]; then
+    log console "🔗 Scripts already available in PATH; skipping symlink creation."
+    return 0
+  fi
+
   # decide if we prompt
   if [[ "$FORCE" == true || "$UNATTENDED" == true ]]; then
     auto_link=true
@@ -330,6 +346,13 @@ install_target() {
 # ─── Creating the NFR_GROUP and preparing LABDIR ──────────────────────────
 setup_group_access() {
   log console "👥 Configuring group access and permissions…"
+
+  local real_user="${SUDO_USER:-$USER}"
+  if id -nG "$real_user" | grep -qw "$NFR_GROUP"; then
+    log console "✅ User '$real_user' is already a member of '${NFR_GROUP}'."
+    return
+  fi
+
 
   # determine whether to prompt or auto-confirm
   local confirm
@@ -581,54 +604,80 @@ log console "🚀 Starting $APP v$VERSION..."
 # ─── Installation Decision Logic ─────────────────────────────────────────
 INSTALL_MODE=""
 
-
-
-# 1) Existing installation? Prompt to update
-log console "  Checking for existing installation in $INSTALL_DIR"
+# 1) Check for an existing install
+log console "Checking for existing installation in $INSTALL_DIR..."
 if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true && "$SKIP_GH" != true ]]; then
-  log console " 🚧  Installation found at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true ]]; then
-    log console " ✅  Unattended mode: can't install.\r\nUse --force to update existing install"
-    exit 1
+  log console "🚧  Installation detected at $INSTALL_DIR."
+  if [[ "$UNATTENDED" == true ]]; then
+    log console "✅  Unattended mode: skipping install (existing present). Use --force to override."
+    exit 0
+  fi
+
+  read -rp "Update existing installation? (y/n): " resp
+  if [[ "$resp" =~ ^[Yy]$ ]]; then
+    INSTALL_MODE="local"
   else
-    read -rp "Update existing installation? (y/n): " resp
-    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="local" || log console " ⚠️  User does not want to update." && exit 1 
+    log console "⚠️  Update cancelled by user. Exiting."
+    exit 0
   fi
 fi
 
-log console "  Checking for install files $(pwd)"
-if [[ $UPGRADE != "true" ]] && check_local staged; then
-  log console " 🚧  Found staged files to install."
-  if [[ "$UNATTENDED" == true || "$SKIP_GH" == true ]]; then
+# 2) Check for staged local install files
+log console "Checking for local install files in $(pwd)..."
+if [[ "$UPGRADE" != true && "$SKIP_GH" != true && -z "$INSTALL_MODE" ]] && check_local staged; then
+  log console "📁  Staged install files found."
+  if [[ "$UNATTENDED" == true ]]; then
     INSTALL_MODE="local"
-    log console " 📁  Unattended mode: installing from local scripts."
+    log console "✅  Unattended mode: installing from local scripts."
   else
-    read -rp "Local scripts detected. Install from local directory? (y/n): " resp
+    read -rp "Install from local scripts? (y/n): " resp
     [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="local"
   fi
 fi
 
-[[ "$SKIP_GH" == true ]]  && INSTALL_MODE=local
-
-if [[ -z $INSTALL_MODE ]]; then
-    read -rp "Do you want to install from GutHub (y/n): " resp
-    [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="github" || log console "no install source chosen" && exit 1
+# 3) Honor command-line overrides
+if [[ "$SKIP_GH" == true ]]; then
+  INSTALL_MODE="local"
+  log console "🛑  --skip-gh: forcing local install."
+fi
+if [[ "$UPGRADE" == true ]]; then
+  INSTALL_MODE="github"
+  log console "🔄  --upgrade: will fetch from GitHub."
 fi
 
+# 4) Final fallback for GitHub install
+if [[ -z "$INSTALL_MODE" ]]; then
+  if [[ "$UNATTENDED" == true ]]; then
+    INSTALL_MODE="github"
+    log console "🌐  Unattended mode: defaulting to GitHub install."
+  else
+    read -rp "No install mode selected. Install from GitHub? (y/n): " resp
+    if [[ "$resp" =~ ^[Yy]$ ]]; then
+      INSTALL_MODE="github"
+    else
+      log console "❌  Installation aborted."
+      exit 1
+    fi
+  fi
+fi
+
+# 5) Act on the chosen mode
 case "$INSTALL_MODE" in
   local)
-    log console "🚀 Installing from local scripts..."
-    # local install logic here
+    log console "🚀  Installing from local scripts..."
+    # …insert your local-install routine here…
     ;;
   github)
-    log console "🌐 Fetching and installing from GitHub..."
+    log console "🌐  Fetching and installing from GitHub…"
     install_from_github "$@"
+    # install_from_github should relaunch and exit
     ;;
   *)
-    log console "❌ No install mode selected; exiting."
+    log console "❌  No install mode selected; exiting."
     exit 1
     ;;
 esac
+
 
 create_directories "$@"
 install_scripts "$@"
