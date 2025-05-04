@@ -570,15 +570,9 @@ parse_meta_var() {
   # 4) Remove inline comments
   value="${value%%#*}"
 
-  # 5) Remove surrounding single or double quotes
-  value="${value%\"}"
-  value="${value#\"}"
-  value="${value%\'}"
-  value="${value#\'}"
-
   # 6) Trim leading/trailing whitespace
   value="$(printf '%s' "$value" \
-    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    | sed -e 's/^"//' -e 's/"\s*$//')"
 
   # 7) Emit exactly what remains (spaces intact)
   printf '%s\n' "$value"
