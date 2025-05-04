@@ -614,7 +614,7 @@ INSTALL_MODE=""
 log console "Checking for existing installation in $INSTALL_DIR..."
 if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
   log console "🚧  Installation detected at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true]]; then
+  if [[ "$UNATTENDED" == true ]]; then
     log console "✅  Unattended mode: skipping install (existing install). Use --force to overwrite."
     exit 0
   else 
