@@ -280,7 +280,7 @@ install_from_github() {
 
   log console "♻️ Relaunching installer from fresh clone…"
   # Notice the /bin/ prefix here
-  exec bash "$clone_dir/bin/setup_lab.sh" --skip-update "$@"
+  exec bash "$clone_dir/bin/setup_lab.sh" --unattended --force "$@"
 }
 
 # ─── Rollback on error only ───────────────────────────────────────────
@@ -551,7 +551,6 @@ while (( $# )); do
       ;;
     --help|-h)        show_help ;;
     --uninstall)      UNINSTALL=true; shift ;;
-    --skip-upgrade)   SKIP_GH=true; shift ;;
     --unattended)     UNATTENDED=true; shift ;;
     --upgrade)        UPGRADE=true;    shift ;;
     --force)          FORCE=true;      shift ;;
@@ -614,25 +613,28 @@ INSTALL_MODE=""
 
 # 1) Check for an existing install
 log console "Checking for existing installation in $INSTALL_DIR..."
-if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true && "$SKIP_GH" != true ]]; then
+if check_local installed "$INSTALL_DIR" && [[ "$UPGRADE" != true ]]; then
   log console "🚧  Installation detected at $INSTALL_DIR."
-  if [[ "$UNATTENDED" == true ]]; then
+  if [[ "$UNATTENDED" == true && "$FORCE" != true ]]; then
     log console "✅  Unattended mode: skipping install (existing present). Use --force to override."
     exit 0
-  fi
-
-  read -rp "Update existing installation? (y/n): " resp
-  if [[ "$resp" =~ ^[Yy]$ ]]; then
+  elif [[ "$UNATTENDED" == true && "$FORCE" == true ]]; then
+    log console "Instaling from local source with FORCE"
     INSTALL_MODE="local"
-  else
-    log console "⚠️  Update cancelled by user. Exiting."
-    exit 0
+  else 
+    read -rp "Update existing installation? (y/n): " resp
+    if [[ "$resp" =~ ^[Yy]$ ]]; then
+      INSTALL_MODE="local"
+    else
+      log console "⚠️  Update cancelled by user."
+      exit 0
+    fi
   fi
 fi
 
 # 2) Check for staged local install files
 log console "Checking for local install files in $(pwd)..."
-if [[ "$UPGRADE" != true && "$SKIP_GH" != true && -z "$INSTALL_MODE" ]] && check_local staged; then
+if [[ "$UPGRADE" != true && -z "$INSTALL_MODE" ]] && check_local staged; then
   log console "📁  Staged install files found."
   if [[ "$UNATTENDED" == true ]]; then
     INSTALL_MODE="local"
@@ -644,10 +646,6 @@ if [[ "$UPGRADE" != true && "$SKIP_GH" != true && -z "$INSTALL_MODE" ]] && check
 fi
 
 # 3) Honor command-line overrides
-if [[ "$SKIP_GH" == true ]]; then
-  INSTALL_MODE="local"
-  log console "🛑  --skip-gh: forcing local install."
-fi
 if [[ "$UPGRADE" == true ]]; then
   INSTALL_MODE="github"
   log console "🔄  --upgrade: will fetch from GitHub."
@@ -672,7 +670,7 @@ fi
 # 5) Act on the chosen mode
 case "$INSTALL_MODE" in
   local)
-    log console "🚀  Installing from local scripts..."
+    log console "🚀  Installing from local source..."
     # …insert your local-install routine here…
     ;;
   github)
