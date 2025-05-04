@@ -48,9 +48,43 @@ launch_tftp() {
   /usr/sbin/in.tftpd --foreground --secure /srv/tftp
 }
 
-launch_ftp() {
+launch_tftp() {
   echo "$FLAG" > /srv/tftp/flag.txt
   /usr/sbin/in.tftpd --foreground --secure /srv/tftp
+}
+
+launch_http() {
+  HTTP_DIR="/opt/target/conf/http"
+  # Escape the flag for safe sed use
+  escaped_flag=$(printf '%s' "$FLAG" | sed 's/[&\\/]/\\&/g')
+  # Gather all files named exactly ###.html
+  mapfile -t pages < <(find "$ERROR_DIR" -maxdepth 1 -type f -regex '.*/[0-9][0-9][0-9]\.html')
+  # Pick one at random
+  chosen="${pages[RANDOM % ${#pages[@]}]}"
+
+  # Snarky fallback messages
+  snarks=(
+    "No flags here, move along!"
+    "Nice try—but no."
+    "Flag not found! Try a different error."
+    "404 FLAG NOT FOUND"
+    "Better luck next time!"
+  )
+
+  # Iterate and replace
+  for page in "${pages[@]}"; do
+    if [[ "$page" == "$chosen" ]]; then
+      # Replace %FLAG% with the real flag
+      sed -i "s|%FLAG%|$escaped_flag|g" "$page"
+    else
+      # Pick a random snark for non-chosen pages
+      snark="${snarks[RANDOM % ${#snarks[@]}]}"
+      sed -i "s|%FLAG%|$snark|g" "$page"
+    fi
+  done
+  # And launch the httpd server
+  thttpd -h /opt/target/conf/http -c '/cgi-bin/*' -e /opt/target/http -D &
+  ncat --listen --ssl --ssl-cert $SSL_CERT_PATH --ssl-key $SSL_KEY_PATH --sh-exec "ncat 127.0.0.1 80" -k -p 443
 }
 
 launch_smtp() {
@@ -81,6 +115,7 @@ case "$SERVICE" in
   smb)      launch_smb ;;
   tftp)     launch_tftp ;;
   ftp)      launch_ftp ;;
+  http)     launch_http ;;
   smtp)     launch_smtp ;;
   *-em)     launch_emulator ;;
   *)        launch_generic ;;

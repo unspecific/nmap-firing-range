@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- Transparent background -->
+  <rect width="100" height="100" fill="none"/>
+
+  <!-- White fill inside the circle -->
+  <circle cx="50" cy="50" r="44" fill="#ffffff"/>
+
+  <!-- Outer red ring -->
+  <circle cx="50" cy="50" r="45" stroke="#8B0000" stroke-width="5" fill="none"/>
+
+  <!-- Outer black ring (1px) -->
+  <circle cx="50" cy="50" r="48" stroke="#000000" stroke-width="1" fill="none"/>
+
+  <!-- Crosshair lines -->
+  <line x1="50" y1="5" x2="50" y2="95" stroke="#8B0000" stroke-width="3"/>
+  <line x1="5" y1="50" x2="95" y2="50" stroke="#8B0000" stroke-width="3"/>
+
+  <!-- Center dot -->
+  <circle cx="50" cy="50" r="4" fill="#8B0000"/>
+
+  <!-- NFR label positioned at 66% height with black outline -->
+  <text x="50" y="70" font-family="Arial, Helvetica, sans-serif"
+        font-size="26" font-weight="bold" fill="#800000"
+        stroke="#000000" stroke-width="2" text-anchor="middle" dominant-baseline="middle">
+    NFR
+  </text>
+</svg>

@@ -1,0 +1,59 @@
+
+
+ 📋 Target Service Modules:
+ ────────────────────────────────────────────────────────────────────
+  Service     	Daemon    	Port    	Description
+  ───────	─────────────	──────────	─────────────────────
+  smb         	Samba     	tcp:139 	Samba+shares, brute force enabled
+  smb         	Samba     	tcp:445 	Samba+shares, brute force enabled
+  smb         	Samba     	udp:137 	Samba+shares, brute force enabled
+  smb         	Samba     	udp:138 	Samba+shares, brute force enabled
+  snmp        	net-snmp  	udp:161 	SNMP server, guess the community
+  tftp        	tftp-hpa  	udp:69  	TFTP server...  tricky
+  imap        	imap4d    	tcp:143 	Check your Mail
+  imap        	imap4d    	tcp:993:tls	Check your Mail with TLS
+  pop         	pop3d     	tcp:110 	Check your Mail
+  pop         	pop3d     	tcp:995:tls	Check your Mail with TLS
+  ssh         	OpenSSHd  	tcp:22  	SSH server running openssh server
+  ftp         	vsFTP     	tcp:21  	FTP server running vsftpd
+  ftp         	vsFTP     	tcp:990:tls	FTP server running vsftpd with TLS
+  smtp        	opensmtp  	tcp:25  	Mail Transport
+  smtp        	opensmtp  	tcp:465:tls	Mail Transport with TLS
+  http        	thttpd    	tcp:80  	Web server running nginx
+  http        	thttpd    	tcp:443:tls	Web server running nginx with TLS
+
+ 📋 Emulated Service Modules:
+ ────────────────────────────────────────────────────────────────────
+  Service     	Daemon    	Port    	Description
+  ───────	─────────────	──────────	─────────────────────
+  api-em      	FakeAPI   	tcp:8080	HTTP REST API, fake flags
+  api-em      	FakeAPI   	tcp:8443:tls	HTTP REST API, fake flags with TLS
+  crap-em     	Unspecific	tcp:9999	Custom API for propriatary client
+  crap-em     	Unspecific	tcp:9443:tls	Custom API for propriatary client with TLS
+  finger-em   	FakeFinger	tcp:79  	Simple Service sharing personal information.
+  ftp-em      	FakeFTPd  	tcp:21  	FTPd emulator, brute force required
+  ftp-em      	FakeFTPd  	tcp:990:tls	FTPd emulator, brute force required with TLS
+  http-em     	FakeHTTPd 	tcp:80  	HTTP/web server it's API?
+  http-em     	FakeHTTPd 	tcp:443:tls	HTTP/web server it's API? with TLS
+  imap-em     	FakeIMAPd 	tcp:143 	IMAP4 emulator, brute force enabled
+  imap-em     	FakeIMAPd 	tcp:993:tls	IMAP4 emulator, brute force enabled with TLS
+  irc-em      	FakeIRC   	TCP:6667	IRCd server
+  irc-em      	FakeIRC   	tcp:6697:tls	IRCd server with TLS
+  ldap-em     	FakeLDAP  	tcp:389 	LDAP w/Anonymous access
+  ldap-em     	FakeLDAP  	tcp:636:tls	LDAP w/Anonymous access with TLS
+  memcached-em	memfaked  	tcp:11211	Key-Value temp storage
+  nntp-em     	FakeNNTP  	tcp:119 	NNTP with brute force
+  nntp-em     	FakeNNTP  	tcp:563:tls	NNTP with brute force with TLS
+  pop3-em     	FakePOP3d 	tcp:110 	POP3 with brute force
+  pop3-em     	FakePOP3d 	tcp:995:tls	POP3 with brute force with TLS
+  redis-em    	FakeRedis 	tcp:6379	Redis with Flag in commands
+  redis-em    	FakeRedis 	tcp:6380:tls	Redis with Flag in commands with TLS
+  smtp-em     	FakeSMTP  	tcp:25  	SMTP Interface, Flag hidden in workflow
+  smtp-em     	FakeSMTP  	tcp:465:tls	SMTP Interface, Flag hidden in workflow with TLS
+  snmp-em     	FakeSNMP  	tcp:161 	Simple SNMP, guess the community
+  snmp-em     	FakeSNMP  	udp:161 	Simple SNMP, guess the community
+  socks4-em   	FakeSOCKS4	tcp:1080	Minimal SOCK4 Proxy
+  socks4-em   	FakeSOCKS4	tcp:1443	Minimal SOCK4 Proxy
+  telnet-em   	FakeTELNETd	tcp:23  	Telnet server, brute force enables
+  telnet-em   	FakeTELNETd	tcp:992:tls	Telnet server, brute force enables with TLS
+

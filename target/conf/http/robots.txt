@@ -1,0 +1,14 @@
+# Nmap Firing Range - robots.txt
+# Disallow sensitive paths and hint at the secret location
+
+User-agent: BadBot
+Disallow: /
+
+User-agent: *
+Disallow: /hidden/
+Disallow: /conf/
+Disallow: /target/
+Disallow: /admin/
+Allow: /flag-here/
+
+Sitemap: /sitemap.xml

@@ -830,8 +830,8 @@ declare -gA USED_HOSTNAMES=()
 
 # 3) Replay mode?
 if [[ -n "$REPLAY_SESSION_ID" ]]; then
-  local replay_dir="$LAB_DIR/$LOG_DIR/lab_$REPLAY_SESSION_ID"
-  local replay_compose="$replay_dir/docker-compose.yml"
+  replay_dir="$LAB_DIR/$LOG_DIR/lab_$REPLAY_SESSION_ID"
+  replay_compose="$replay_dir/docker-compose.yml"
 
   log console " 🔁 Replaying session $REPLAY_SESSION_ID..."
 
@@ -1178,7 +1178,7 @@ EOF
   cat >> "$compose_file" <<EOF
     command: sh -c "/opt/target/launch_target.sh; /bin/bash"
     volumes:
-      - $SESSION_DIR/$TARGET_DIR:/opt/target:ro
+      - $SESSION_DIR/$TARGET_DIR:/opt/target:rw
       - $SESSION_DIR/$TARGET_DIR/conf/resolv.conf:/etc/resolv.conf
       - $SESSION_DIR/$LOG_DIR/services:/var/log/services:rw
     logging:
@@ -1190,7 +1190,6 @@ EOF
 
 EOF
 
-  # 8) Stop if we've launched enough
   if (( NUM_SERVICES > 0 && lab_launch >= NUM_SERVICES )); then
     log silent "✔ Launched $lab_launch services (limit: $NUM_SERVICES)"
     break

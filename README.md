@@ -61,102 +61,64 @@ What started as a simple idea has evolved into a flexible, containerized lab env
 - The program is extensible.  The emulated service can be dropped into a folder to add more service options.
 
 
-# launch_lab
+Troubleshoot Targets:
 
-Launch lab output
 
 ```
-$ sudo launch_lab 
+ 📋 Target Service Modules:
+ ────────────────────────────────────────────────────────────────────
+  Service     	Daemon    	Port          Status
+  ───────     	──────────  ────────	    ─────────────────────
+  smb         	Samba     	tcp:139
+  smb         	Samba     	tcp:445
+  smb         	Samba     	udp:137
+  smb         	Samba     	udp:138
+  snmp        	net-snmp  	udp:161
+  tftp        	tftp-hpa  	udp:69
+  imap        	imap4d    	tcp:143
+  imap        	imap4d    	tcp:993:tls
+  pop         	pop3d     	tcp:110
+  pop         	pop3d     	tcp:995:tls
+  ssh         	OpenSSHd  	tcp:22
+  ftp         	vsFTP     	tcp:21
+  ftp         	vsFTP     	tcp:990:tls
+  smtp        	opensmtp  	tcp:25
+  smtp        	opensmtp  	tcp:465:tls
+  http        	thttpd    	tcp:80
+  http        	thttpd    	tcp:443:tls
 
- 🎩  Nmap Firing Range (NFR) Launcher v0.5 - Lee 'MadHat' Heath <lheath@unspecific.com>
- 🚀  Launching random lab at 2025-04-13_11-27-10
- 🆔  SESSION_ID 4bde1556f990245799903eaaa8bc6c48
- ℹ️   Docker network 'pentest-net' not found. It will be created by the script.
- ✅  All required components are present.
- 🌐  Creating Subnet for Scanning - 192.168.200.0/24
-fd3140f83bf9d5a961b2c86ccd245d85fd0271962da3097d0120729590a90b1d
- ➕  Enabling Serice port #1
- ➕  Enabling Serice port #2
- ➕  Enabling Serice port #3
- ➕  Enabling Serice port #4
- ➕  Enabling Serice port #5
- ➕  Enabling Serice port #6
- ➕  Enabling Serice port #7
- ➕  Enabling Serice port #8
- 🚀  Launching 5 targets with 8 open ports. Good Luck
-[+] Running 5/5
- ✔ Container telnet_host   Started 0.3s 
- ✔ Container http_host     Started 0.3s 
- ✔ Container smb_host      Started 0.2s 
- ✔ Container ssh_host      Started 0.3s 
- ✔ Container netcat_host   Started 0.3s 
-Your Firing Range has been launched.
+ 📋 Emulated Service Modules:
+ ────────────────────────────────────────────────────────────────────
+  Service     	Daemon    	Port    	    Status
+  ───────       ──────────  ────────      ─────────────────────
+  api-em      	FakeAPI   	tcp:8080	
+  api-em      	FakeAPI   	tcp:8443:tls
+  crap-em     	Unspecific	tcp:9999
+  crap-em     	Unspecific	tcp:9443:tls
+  finger-em   	FakeFinger	tcp:79
+  ftp-em      	FakeFTPd  	tcp:21
+  ftp-em      	FakeFTPd  	tcp:990:tls
+  http-em     	FakeHTTPd 	tcp:80
+  http-em     	FakeHTTPd 	tcp:443:tls
+  imap-em     	FakeIMAPd 	tcp:143
+  imap-em     	FakeIMAPd 	tcp:993:tls
+  irc-em      	FakeIRC   	TCP:6667
+  irc-em      	FakeIRC   	tcp:6697:tls
+  ldap-em     	FakeLDAP  	tcp:389
+  ldap-em     	FakeLDAP  	tcp:636:tls
+  memcached-em	memfaked  	tcp:11211
+  nntp-em     	FakeNNTP  	tcp:119
+  nntp-em     	FakeNNTP  	tcp:563:tls
+  pop3-em     	FakePOP3d 	tcp:110
+  pop3-em     	FakePOP3d 	tcp:995:tls
+  redis-em    	FakeRedis 	tcp:6379
+  redis-em    	FakeRedis 	tcp:6380:tls
+  smtp-em     	FakeSMTP  	tcp:25
+  smtp-em     	FakeSMTP  	tcp:465:tls
+  snmp-em     	FakeSNMP  	tcp:161
+  snmp-em     	FakeSNMP  	udp:161
+  socks4-em   	FakeSOCKS4	tcp:1080
+  socks4-em   	FakeSOCKS4	tcp:1443
+  telnet-em   	FakeTELNETd	tcp:23
+  telnet-em   	FakeTELNETd	tcp:992:tls
 ```
-
-# cleanup_lab
-
-Cleanup script output
-
-```
-$ sudo cleanup_lab 
-
- 🎩  NFR Cleanup v0.4 - Lee 'MadHat' Heath <lheath@unspecific.com>
- 🛑  Stopping and removing containers...
-[+] Running 5/5
- ✔ Container ssh_host      Removed 0.2s 
- ✔ Container smb_host      Removed 0.3s 
- ✔ Container netcat_host   Removed 10.2s 
- ✔ Container telnet_host   Removed 0.0s 
- ✔ Container http_host     Removed 0.3s 
- 🌐 Removing lab network (pentest-net)...
-pentest-net
- 🗑️  Removing unused Docker volumes...
-Deleted Volumes:
-66f21d34205256a7bcf5604fad5ca4cf0bcc9c1cc8f25286d30bced50ff38d3a
-8855ed83dc61b0617d5894c3522aec8e293d81d3f28bc5d04c37018bcf3ba69a
-fc86bba86027d80f07ff018780d29b48df06e2432925e992ddb1784a22e22838
-6946e3915440430b97c2ed2e3f7540734147e1ca8b9d76ea82d5a31c265075c4
-ad605dc4e89c7bbf6238734305ca50a9e0d26be5043a27c9a23eab383da7eb92
-
-Total reclaimed space: 4.595MB
- 🧹 Cleaning up generated lab files and directories...
- ✅ Lab environment cleanup complete.
-```
-
-
-
-
-#  Scorecard format
-
-```
-session=9f01175ee5e7645df7d3d0c2e7747dd7
-service=telnet target=192.168.200.153 port=5537 proto=tcp flag=FLAG{89ea16740192885a}
-service=http target=192.168.200.46 port=80 proto=tcp flag=FLAG{7bb9aae3d2bc34d0}
-service=telnet target=192.168.200.24 port=23 proto=tcp flag=FLAG{7ca3d11760335622}
-service=ssh target=192.168.200.20 port=22 proto=tcp flag=FLAG{d6a91cde647db}
-```
-
-# check_lab script
-
-```
-$ check_lab.sh score_card 
-
- 🎩  NFR-CheckLab v0.5 - Lee 'MadHat' Heath <lheath@unspecific.com>
-✅ SESSION_ID: 9f01175ee5e7645df7d3d0c2e7747dd7 - Scoring session started
----------------------------
-❌ telnet 192.168.200.153:5537:tcp → No Flag Match -1 pts
-✅ telnet 192.168.200.153:5537:tcp → Network correct (misidentified service) +4 pts
-✅ http 192.168.200.46:80:tcp → Flag Match +5 pts
-✅ http 192.168.200.46:80:tcp → Network Identified (IP, Port and Protocol are correct) +3 pts
-✅ telnet 192.168.200.24:23:tcp → Flag Match +5 pts
-✅ telnet 192.168.200.24:23:tcp → Network Identified (IP, Port and Protocol are correct) +3 pts
-❌ ssh 192.168.200.20:22:tcp → No Flag Match -1 pts
-✅ ssh 192.168.200.20:22:tcp → Network Identified (IP, Port and Protocol are correct) +3 pts
----------------------------
-🧮 Score: 21
-✔️  Correct: 15
-❌ Incorrect: 9
-🕵️  Missed services:
-- ❗ 192.168.200.139:21:tcp was not reported
-```
-

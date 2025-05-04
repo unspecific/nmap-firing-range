@@ -1,0 +1,9 @@
+# security.txt for Nmap Firing Range
+# https://datatracker.ietf.org/doc/html/rfc9116
+
+Contact: mailto:security@nfr.lab
+Expires: 2025-12-31T23:59:59Z
+Encryption: https://console.nfr.lab/pgp-key.txt
+Acknowledgments: https://console.nfr.lab/security/hall-of-fame.html
+Policy: https://console.nfr.lab/security/policy.html
+Preferred-Languages: en, fr
