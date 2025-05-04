@@ -1258,6 +1258,8 @@ else
 fi
 
 log console " 🎉  Your Nmap Firing Range is ready for testing!"
+log console " Start your adventure with this command:"
+log console "     nmap -v $SUBNET.0/24"
 echo
 
 # ─── Report duration ───────────────────────────────────────────────────────
