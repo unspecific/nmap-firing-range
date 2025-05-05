@@ -1178,6 +1178,7 @@ EOF
   cat >> "$compose_file" <<EOF
     command: sh -c "/opt/target/launch_target.sh; /bin/bash"
     volumes:
+      - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro
       - $SESSION_DIR/$TARGET_DIR:/opt/target:rw
       - $SESSION_DIR/$TARGET_DIR/conf/resolv.conf:/etc/resolv.conf
       - $SESSION_DIR/$LOG_DIR/services:/var/log/services:rw

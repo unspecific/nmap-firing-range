@@ -319,14 +319,18 @@ install_conf() {
     exit 1
   fi
 
-  mkdir -p "$CONF_DIR"
-  record "$CONF_DIR"                       # so we can remove it on rollback
+  if mkdir -p "$CONF_DIR"; then
+    log silent "Success mkdir $CONF_DIR"
+  else
+    log console "❌ Failed to create $CONF_DIR"
+    exit 1
+  fi
 
-  cp -r "$src_dir/"* "$CONF_DIR/" || {
+  cp -a "$src_dir"/. "$CONF_DIR"/ && log console "Successful copy" || {
     log console "❌ Failed to copy configuration files"
     exit 1
   }
-
+  chmod 755 $CONF_DIR/web_score_card/cgi-bin/*.cgi
   log console "✅ Configuration files installed to $CONF_DIR"
 }
 

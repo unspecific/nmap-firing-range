@@ -3,7 +3,7 @@ logger "Launching launch_target on $HOSTNAME"
 echo "------------- New host $HOSTNMAE" >> /opt/target/ENV
 env >> /opt/target/ENV
 
-VERSION=1.3
+VERSION=1.7
 
 # ─── Input Variables ───────────────────────────────────────────────────────────
 SERVICE="${SERVICE}"
@@ -55,41 +55,39 @@ launch_tftp() {
 
 launch_http() {
   HTTP_DIR="/opt/target/conf/http"
-  # Escape the flag for safe sed use
-  escaped_flag=$(printf '%s' "$FLAG" | sed 's/[&\\/]/\\&/g')
-  # Gather all files named exactly ###.html
-  mapfile -t pages < <(find "$ERROR_DIR" -maxdepth 1 -type f -regex '.*/[0-9][0-9][0-9]\.html')
-  # Pick one at random
-  chosen="${pages[RANDOM % ${#pages[@]}]}"
-
-  # Snarky fallback messages
-  snarks=(
-    "No flags here, move along!"
-    "Nice try—but no."
-    "Flag not found! Try a different error."
-    "404 FLAG NOT FOUND"
-    "Better luck next time!"
-  )
-
-  # Iterate and replace
-  for page in "${pages[@]}"; do
-    if [[ "$page" == "$chosen" ]]; then
-      # Replace %FLAG% with the real flag
-      sed -i "s|%FLAG%|$escaped_flag|g" "$page"
-    else
-      # Pick a random snark for non-chosen pages
-      snark="${snarks[RANDOM % ${#snarks[@]}]}"
-      sed -i "s|%FLAG%|$snark|g" "$page"
-    fi
-  done
+  echo "$FLAG" > "$HTTP_DIR/.flag"
+  find "$HTTP_DIR" -type f -exec chmod 744 {} \;
+  find "$HTTP_DIR" -type d -exec chmod 755 {} \;
+  chmod 755 "$HTTP_DIR/cgi-bin/*.cgi"
   # And launch the httpd server
-  thttpd -h /opt/target/conf/http -c '/cgi-bin/*' -e /opt/target/http -D &
+  thttpd -d /opt/target/conf/http -c '/cgi-bin/*'
   ncat --listen --ssl --ssl-cert $SSL_CERT_PATH --ssl-key $SSL_KEY_PATH --sh-exec "ncat 127.0.0.1 80" -k -p 443
 }
 
 launch_smtp() {
   smtpd -F
 }
+
+launch_snmp() {
+  rsyslogd
+  SNMP_CONF="/opt/target/conf/snmp/snmpd.conf"
+  echo "$FLAG" > "/opt/target/conf/snmp/.flag"
+  if [[ ! -f "$SNMP_CONF" ]]; then
+    logger "Missing Config SNMP $SNMP_CONF"
+    exit 1
+  fi
+  if sed -i "s/%COMMUNITY%/${COMMUNITY}/g" "$SNMP_CONF"; then
+    logger "unable to update community"
+  fi
+  if sed -i "s/%SESSION_ID%/${SESSION_ID}/g" "$SNMP_CONF"; then
+    logger "unable to update community"
+  fi
+  if sed -i "s/%PORT%/${PORTS}/g" "$SNMP_CONF"; then
+    logger "unable to update community"
+  fi
+  snmpd -f -Lsd -c "$SNMP_CONF"
+}
+
 
 launch_emulator() {
   local proto="${SERVICE%-em}"
@@ -117,6 +115,7 @@ case "$SERVICE" in
   ftp)      launch_ftp ;;
   http)     launch_http ;;
   smtp)     launch_smtp ;;
+  snmp)     launch_snmp ;;
   *-em)     launch_emulator ;;
   *)        launch_generic ;;
 esac

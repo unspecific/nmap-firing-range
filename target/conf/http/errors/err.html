@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title id="page-title">Error</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      fetch(window.location.href, { method: 'HEAD' })
+        .then(response => {
+          const code = String(response.status);
+          const messages = {
+            '400': 'Bad Request',
+            '401': 'Unauthorized',
+            '403': 'Forbidden',
+            '404': 'Not Found',
+            '500': 'Internal Server Error',
+            '501': 'Not Implemented'
+          };
+          const desc = messages[code] || 'Unknown Error';
+
+          // Inject status
+          document.getElementById('page-title').textContent = `${code} ${desc}`;
+          document.getElementById('err-code').textContent  = code;
+          document.getElementById('err-msg').textContent   = desc;
+
+          // Excuses
+          const excuses = [
+            "It’s not you, it’s us.",
+            "The server needed a coffee break.",
+            "Our gremlins are taking a nap.",
+            "You shall not pass!",
+            "Error 404: Fun not found.",
+            "We hit a snag. Try again?",
+            "Oops, we misplaced that one.",
+            "Looks like gremlins ate this page.",
+            "Flag’s gone fishing.",
+            "404: Flag in another castle.",
+            "Perhaps try knocking?",
+            "We swear it worked before.",
+            "Server took a holiday.",
+            "Flags? We don’t see any flags.",
+            "This is a training exercise.",
+            "You’re getting warmer… or colder.",
+            "Hack harder, friend.",
+            "Error? More like feature.",
+            "Did you try turning it off and on?",
+            "404: Confidence not found."
+          ];
+          document.getElementById('err-excuse').textContent =
+            excuses[Math.floor(Math.random() * excuses.length)];
+
+          // Session-based chosen code
+          const codes = Object.keys(messages);
+          let chosen = sessionStorage.getItem('chosenErrorCode');
+          console.log(`🎯 Does ${code} match ${chosen}?`);
+          if (!chosen || !codes.includes(chosen)) {
+            chosen = codes[Math.floor(Math.random() * codes.length)];
+            sessionStorage.setItem('chosenErrorCode', chosen);
+          }
+
+          // Only fetch+reveal flag when this is the “chosen” error
+          if (code === chosen) {
+            console.log(`🎯 Matched chosen code (${chosen}), fetching flag…`);
+            const headerName  = atob('WC1GUi1Ub2tlbg==');  // "X-FR-Token"
+            const headerValue = atob('RmlyZ2luZ1Jhbmdl');  // "FiringRange"
+
+            fetch('/cgi-bin/flag.cgi', {
+              headers: { [headerName]: headerValue }
+            })
+            .then(r => {
+              console.log('Flag fetch response status:', r.status);
+              if (!r.ok) throw new Error();
+              return r.text();
+            })
+            .then(flagText => {
+              const el = document.getElementById('err-flag');
+              el.textContent = flagText.trim();
+              el.removeAttribute('aria-hidden');
+            })
+            .catch(err => {
+                console.error('❌ Flag fetch error:', err);
+            });
+          }
+
+          // Optional server debug dump
+          fetch('/cgi-bin/env.cgi')
+            .then(r => r.text())
+            .then(txt => console.log('SERVER ENV:', txt));
+        })
+        .catch(() => {
+          document.getElementById('err-code').textContent  = 'Error';
+          document.getElementById('err-msg').textContent   = 'Unknown Error';
+          document.getElementById('err-excuse').textContent = 'Unexpected network issue.';
+        });
+    });
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <a href="/index.html"><img src="/img/logo.svg" class="logo" alt=""></a>
+    <h1 class="site-title">Nmap Firing Range</h1>
+  </header>
+
+  <div class="content">
+    <h1 id="err-code"></h1>
+    <h2 id="err-msg"></h2>
+    <p>Sorry, that page generated an error. Try again, or head back home.</p>
+    <p id="err-excuse" class="excuse"></p>
+    <p id="err-flag" class="flag" aria-hidden="true"></p>
+    <a class="button" href="/">← Back to Home</a>
+  </div>
+
+  <footer class="footer">
+    <hr>
+    <p>&copy; 2025 Nmap Firing Range. 
+       <a href="/security/policy.html">Security Policy</a> | 
+       <a href="/privacy.html">Privacy Policy</a>
+    </p>
+  </footer>
+</body>
+</html>
