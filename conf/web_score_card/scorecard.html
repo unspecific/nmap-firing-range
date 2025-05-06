@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nmap Firing Range - Scorecard</title>
+  <style>
+    body {
+      background-color: #101010;
+      color: #e0e0e0;
+      font-family: monospace;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    h1 {
+      text-align: center;
+      color: #00ff88;
+      margin-bottom: 1rem;
+    }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      background: #181818;
+      padding: 1rem;
+      border: 1px solid #333;
+      border-radius: 6px;
+    }
+
+    form input {
+      background: #222;
+      border: 1px solid #444;
+      color: #eee;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.9rem;
+      width: 120px;
+      border-radius: 4px;
+    }
+
+    form button {
+      background-color: #00ff88;
+      border: none;
+      color: #101010;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      border: 1px solid #333;
+      padding: 0.5rem;
+      text-align: center;
+    }
+
+    th {
+      background-color: #181818;
+      color: #00ff88;
+    }
+
+    tr:nth-child(even) {
+      background-color: #1a1a1a;
+    }
+
+    #score-display {
+      text-align: center;
+      margin-top: 1rem;
+      font-size: 1rem;
+      color: #00ff88;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎯 Nmap Firing Range Scorecard</h1>
+
+  <form action="/cgi-bin/submit_score.cgi" method="POST">
+    <input type="text" name="hostname" placeholder="Hostname" required>
+    <input type="text" name="ip" placeholder="IP Address" required>
+    <input type="number" name="port" placeholder="Port" required>
+    <input type="text" name="protocol" placeholder="Protocol" required>
+    <input type="text" name="service" placeholder="Service" required>
+    <input type="text" name="flag" placeholder="Flag" required>
+    <button type="submit">Submit</button>
+  </form>
+
+  <div id="score-display">Current Score: <span id="score-value">0</span></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Hostname</th>
+        <th>IP</th>
+        <th>Port</th>
+        <th>Protocol</th>
+        <th>Service</th>
+        <th>Flag</th>
+        <th>Timestamp</th>
+        <th>Score</th>
+      </tr>
+    </thead>
+    <tbody id="submitted-entries">
+      <!-- Entries will be injected here -->
+    </tbody>
+  </table>
+
+  <script>
+    // Optional JS to load existing submissions from score.json
+    fetch('/etc/score.json')
+      .then(r => r.json())
+      .then(data => {
+        let totalScore = 0;
+        data.entries.reverse().forEach(entry => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${entry.host || '-'}</td>
+            <td>${entry.ip || '-'}</td>
+            <td>${entry.port || '-'}</td>
+            <td>${entry.protocol || '-'}</td>
+            <td>${entry.service || '-'}</td>
+            <td>${entry.flag || '-'}</td>
+            <td>${entry.timestamp}</td>
+            <td>${entry.score}</td>
+          `;
+          document.getElementById('submitted-entries').appendChild(row);
+          totalScore += entry.score;
+        });
+        document.getElementById('score-value').textContent = totalScore;
+      })
+      .catch(() => {
+        // Fallback or error display
+      });
+  </script>
+
+</body>
+</html>

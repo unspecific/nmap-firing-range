@@ -4,26 +4,70 @@
 <meta charset="UTF-8">
 <title>Live Tcpdump Viewer</title>
 <style>
-body { font-family: monospace; background: #111; color: #0f0; padding: 1em; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: 1px solid #333; padding: 4px; text-align: center; }
-th { background: #222; }
-input, select { width: 90%; background: #222; color: #0f0; border: 1px solid #555; text-align: center; }
-tr:nth-child(even) { background: #222; }
+body {
+  background: #101010;
+  color: #0f0;
+  font-family: monospace;
+  margin: 0;
+  padding: 1em;
+}
+
+h1 {
+  text-align: center;
+  color: #00ffaa;
+}
+
+#controls {
+  display: flex;
+  justify-content: space-between;
+  margin: 1em 0;
+  align-items: center;
+}
+
+select, input[type="text"] {
+  background: #222;
+  border: 1px solid #444;
+  color: #0f0;
+  padding: 0.3em;
+  font-family: monospace;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #333;
+  padding: 4px;
+  text-align: center;
+}
+
+th {
+  background: #1e1e1e;
+  color: #00ffaa;
+}
+
+tr:nth-child(even) {
+  background-color: #1a1a1a;
+}
 </style>
 </head>
 <body>
 
-<h1 style="text-align:center;">Live Tcpdump Viewer</h1>
+<h1>📡 TCPDump Feed</h1>
 
-<div style="text-align:center;">
-Show last: 
-<select id="limit" onchange="setLimit()">
-  <option value="100" selected>100</option>
-  <option value="250">250</option>
-  <option value="500">500</option>
-  <option value="1000">1000</option>
-</select> entries
+<div id="controls">
+  <div>
+    Show last:
+    <select id="limit" onchange="setLimit()">
+      <option value="100" selected>100</option>
+      <option value="250">250</option>
+      <option value="500">500</option>
+      <option value="1000">1000</option>
+    </select>
+  </div>
+  <label><input type="checkbox" id="autoscroll" checked> Auto-Scroll</label>
 </div>
 
 <table id="logtable">
@@ -37,51 +81,51 @@ Show last:
 <th>Destination<br><input id="filter5" type="text" oninput="applyFilter()"></th>
 </tr>
 </thead>
-<tbody id="logbody">
-</tbody>
+<tbody id="logbody"></tbody>
 </table>
 
 <script>
 var source = new EventSource("/cgi-bin/tcpdumpstream.cgi");
 var maxRows = 100;
+var autoscroll = true;
+document.getElementById("autoscroll").addEventListener("change", e => {
+  autoscroll = e.target.checked;
+});
 
 source.onmessage = function(event) {
-    var parts = event.data.split('|');
-    var table = document.getElementById("logbody");
-    var row = document.createElement("tr");
-    for (var i = 0; i < parts.length; i++) {
-        var cell = document.createElement("td");
-        cell.textContent = parts[i];
-        row.appendChild(cell);
-    }
-    table.appendChild(row);
-    while (table.rows.length > maxRows) {
-        table.deleteRow(0);
-    }
-    applyFilter();
+  var parts = event.data.split('|');
+  var table = document.getElementById("logbody");
+  var row = document.createElement("tr");
+  for (var i = 0; i < parts.length; i++) {
+    var cell = document.createElement("td");
+    cell.textContent = parts[i];
+    row.appendChild(cell);
+  }
+  table.appendChild(row);
+  while (table.rows.length > maxRows) {
+    table.deleteRow(0);
+  }
+  applyFilter();
+  if (autoscroll) {
+    table.parentElement.scrollTop = table.parentElement.scrollHeight;
+  }
 };
 
 function applyFilter() {
-    var filters = [];
-    for (var i = 0; i < 6; i++) {
-        filters[i] = document.getElementById("filter"+i).value.toLowerCase();
-    }
-    var table = document.getElementById("logbody");
-    for (var i = 0; i < table.rows.length; i++) {
-        var show = true;
-        for (var j = 0; j < 6; j++) {
-            if (filters[j] && table.rows[i].cells[j].textContent.toLowerCase().indexOf(filters[j]) === -1) {
-                show = false;
-                break;
-            }
-        }
-        table.rows[i].style.display = show ? "" : "none";
-    }
+  var filters = [];
+  for (var i = 0; i < 6; i++) {
+    filters[i] = document.getElementById("filter"+i).value.toLowerCase();
+  }
+  var table = document.getElementById("logbody");
+  for (var i = 0; i < table.rows.length; i++) {
+    let row = table.rows[i];
+    let show = filters.every((f, j) => !f || row.cells[j].textContent.toLowerCase().includes(f));
+    row.style.display = show ? "" : "none";
+  }
 }
 
 function setLimit() {
-    var sel = document.getElementById("limit");
-    maxRows = parseInt(sel.value);
+  maxRows = parseInt(document.getElementById("limit").value);
 }
 </script>
 

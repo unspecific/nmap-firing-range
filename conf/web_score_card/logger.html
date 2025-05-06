@@ -2,28 +2,96 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Live Log Viewer</title>
+  <title>🔍 Live Syslog Viewer</title>
   <style>
-    body { font-family: monospace; background: #111; color: #0f0; margin: 0; padding: 1em; }
-    pre { white-space: pre-wrap; word-wrap: break-word; }
+    body {
+      background: #121212;
+      color: #00ff00;
+      font-family: monospace;
+      margin: 0;
+      padding: 1em;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 0.5em;
+      color: #00ffaa;
+    }
+    #controls {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5em;
+    }
+    input[type="text"] {
+      background: #222;
+      border: 1px solid #555;
+      color: #0f0;
+      padding: 0.4em;
+      width: 60%;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      font-size: 0.9em;
+      color: #aaa;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #000;
+      padding: 0.5em;
+      border: 1px solid #222;
+      height: 80vh;
+      overflow-y: scroll;
+    }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
 
-<h1>Live Log</h1>
+<h1>📡 Syslog Feed</h1>
+
+<div id="controls">
+  <input type="text" id="filter" placeholder="Filter text (e.g. IP, keyword, port)">
+  <label>
+    <input type="checkbox" id="autoscroll" checked style="margin-right: 0.5em;">
+    Auto-Scroll
+  </label>
+</div>
+
 <pre id="log"></pre>
 
 <script>
-var source = new EventSource("/cgi-bin/logstream.cgi");
+const logBox = document.getElementById('log');
+const filterInput = document.getElementById('filter');
+const autoScrollToggle = document.getElementById('autoscroll');
+
+let logLines = [];
+
+function updateLogDisplay() {
+  const filter = filterInput.value.toLowerCase();
+  logBox.textContent = logLines
+    .filter(line => line.toLowerCase().includes(filter))
+    .join('\n');
+
+  if (autoScrollToggle.checked) {
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+}
+
+filterInput.addEventListener('input', updateLogDisplay);
+
+const source = new EventSource("/cgi-bin/logstream.cgi");
 
 source.onmessage = function(event) {
-    var log = document.getElementById("log");
-    log.textContent += event.data + "\n";
-    log.scrollTop = log.scrollHeight; // Auto scroll
+  logLines.push(event.data);
+  if (logLines.length > 5000) logLines.shift(); // Keep memory low
+  updateLogDisplay();
 };
 
 source.onerror = function() {
-    source.close();
+  source.close();
 };
 </script>
 

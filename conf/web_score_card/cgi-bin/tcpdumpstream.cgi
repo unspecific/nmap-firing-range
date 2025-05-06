@@ -15,6 +15,9 @@ trap "exit 0" SIGPIPE
 
 # Tail and stream
 tail -n 100 -F "$LOG_FILE" 2>/dev/null | while read -r line; do
+    # Skip malformed or unexpected lines
+    [[ -z "$line" || "$line" != *">"* ]] && continue
+
     datetime=$(echo "$line" | awk '{print $1}')
     interface=$(echo "$line" | awk '{print $2}')
     direction=$(echo "$line" | awk '{print $3}')
@@ -26,5 +29,5 @@ tail -n 100 -F "$LOG_FILE" 2>/dev/null | while read -r line; do
 
     echo "data: $datetime|$interface|$direction|$proto|$src|$dst"
     echo
-    sleep 0.05 || break  # Important: break if writing fails
+    sleep 0.05 || break
 done
