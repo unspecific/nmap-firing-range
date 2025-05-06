@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ─── Privilege check ─────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
-  echo " 🔒 Root access required. Re-running with sudo..."
+  echo " 🔒  Root access required. Re-running with sudo..."
   exec sudo "$0" "$@"
 fi
 
@@ -30,7 +30,7 @@ else
 fi
 
 if [[ ! -f "$SUBMISSION_FILE" ]]; then
-  echo " ❌ Score card not found: $SUBMISSION_FILE" >&2
+  echo " ❌  Score card not found: $SUBMISSION_FILE" >&2
   echo "Run this from the project root (where score_card was generated)." >&2
   exit 1
 fi
@@ -38,7 +38,7 @@ fi
 # ─── Extract session ID from the score_card ─────────────────────────────────
 SESSION_ID=$(grep -m1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2-)
 if [[ -z "$SESSION_ID" ]]; then
-  echo " ❌ session= not found in $SUBMISSION_FILE" >&2
+  echo " ❌  session= not found in $SUBMISSION_FILE" >&2
   exit 1
 fi
 
@@ -52,11 +52,11 @@ echo " 🔁  Cleaning up session $SESSION_ID in $SESSION_DIR"
 
 # ─── Sanity checks ────────────────────────────────────────────────────────────
 if [[ ! -f "$SERVICES_MAP" ]]; then
-  echo " ❌ Lab session not found at $SESSION_DIR" >&2
+  echo " ❌  Lab session not found at $SESSION_DIR" >&2
   exit 1
 fi
 if [[ ! -f "$COMPOSE_FILE" ]]; then
-  echo " ❌ Compose file not found at $COMPOSE_FILE" >&2
+  echo " ❌  Compose file not found at $COMPOSE_FILE" >&2
   exit 1
 fi
 

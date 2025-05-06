@@ -1,74 +1,118 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="tcp:21 tcp:990:tls"               # The port this service listens on
-EM_VERSION="3.6"               # Optional version identifier
+EM_PORT="tcp:21 tcp:990:tls"
+EM_VERSION="3.6"
 EM_DAEMON="FakeFTPd"
-EM_DESC="FTPd emulator, brute force required"  # Short description for listing output
+EM_DESC="FTPd emulator, brute force required"
 
-
-correct_user="$USERNAME"
-correct_pass="$PASSWORD"
-max_attempts=5
+# Credentials & state
+CORRECT_USER="${USERNAME:-}"
+CORRECT_PASS="${PASSWORD:-}"
+MAX_ATTEMPTS=5
 attempts=0
 authenticated=false
 
-echo -e "220 Welcome to $EM_DAEMON/$EM_VERSION"
+# Send the initial banner
+banner() {
+  echo -e "220-${EM_DAEMON}/${EM_VERSION} FTP server ready"
+  echo -e "220-This is a fake FTPd emulator"
+  echo -e "220-Use USER/PASS to log in, then LIST or RETR secret.txt"
+  echo -e "220 End of banner"
+}
 
-while IFS= read -r line; do
-    cmd=$(echo "$line" | awk '{print $1}')
-    arg=$(echo "$line" | cut -d' ' -f2-)
+# Handle login
+auth_loop() {
+  while (( attempts < MAX_ATTEMPTS )); do
+    read -r line || exit 0
+    cmd=${line%% *}; arg=${line#* }
 
-  if [[ "$authenticted" != "true" ]]; then
-    case "$cmd" in
+    case "${cmd^^}" in
       USER)
         username="$arg"
-        echo "331 Username okay, need password."
+        echo -e "331 Username ok, need password"
         ;;
       PASS)
         password="$arg"
-        if [[ "$username" == "$correct_user" && "$password" == "$correct_pass" ]]; then
-          echo "230 Login successful."
+        if [[ "$username" == "$CORRECT_USER" && "$password" == "$CORRECT_PASS" ]]; then
+          echo -e "230 Login successful"
           authenticated=true
-          break
+          return
         else
-          echo "530 Login incorrect."
-          attempts=$((attempts + 1))
-          if [[ "$attempts" -ge "$max_attempts" ]]; then
-            echo "421 Too many failed attempts. Connection closed."
-            exit 0
+          ((attempts++))
+          echo -e "530 Login incorrect (${attempts}/${MAX_ATTEMPTS})"
+          if (( attempts >= MAX_ATTEMPTS )); then
+            echo -e "421 Too many failed attempts – closing connection"
+            exit 1
           fi
         fi
         ;;
       QUIT)
-        echo "221 Goodbye."
-        exit 0
-        ;;
-    esac
-  else 
-    case "$cmd" in
-      LIST)
-        echo "150 Opening ASCII mode data connection for file list."
-        echo "-rw-r--r-- 1 root root 42 Apr 18 2025 secret.txt"
-        echo "226 Transfer complete."
-        ;;
-      RETR)
-        if [[ "$arg" == "secret.txt" ]]; then
-          echo "150 Opening BINARY mode data connection for secret.txt"
-          echo "$FLAG"
-          echo "226 Transfer complete."
-        else
-          echo "550 File not found."
-        fi
-        ;;
-      QUIT)
-        echo "221 Goodbye."
+        echo -e "221 Goodbye"
         exit 0
         ;;
       *)
-        echo "502 Command not implemented."
+        echo -e "530 Please login with USER and PASS"
         ;;
     esac
-  fi
-done
-sleep 1
+  done
+}
+
+# Main FTP loop after auth
+ftp_loop() {
+  while read -r line || [[ -n "$line" ]]; do
+    cmd=${line%% *}; arg=${line#* }
+
+    case "${cmd^^}" in
+      SYST)
+        echo -e "215 UNIX Type: L8"
+        ;;
+      FEAT)
+        echo -e "211-Features:"
+        echo -e " EPRT"
+        echo -e " EPSV"
+        echo -e "211 End"
+        ;;
+      PASV)
+        # stub—clients won’t actually open a data port
+        echo -e "227 Entering Passive Mode (127,0,0,1,200,200)"
+        ;;
+      TYPE)
+        echo -e "200 Type set to $arg"
+        ;;
+      LIST)
+        echo -e "150 Here comes the directory listing"
+        echo -e "-rw-r--r-- 1 owner group  42 $(date +'%b %d %Y') secret.txt"
+        echo -e "226 Directory send OK"
+        ;;
+      RETR)
+        if [[ "$arg" == "secret.txt" ]]; then
+          echo -e "150 Opening BINARY mode data connection for $arg"
+          echo -e "$FLAG"
+          echo -e "226 Transfer complete"
+        else
+          echo -e "550 File not found"
+        fi
+        ;;
+      QUIT)
+        echo -e "221 Goodbye"
+        exit 0
+        ;;
+      *)
+        echo -e "502 Command not implemented"
+        ;;
+    esac
+  done
+}
+
+main() {
+  banner
+  auth_loop
+  ftp_loop
+  # give scanners a moment to grab final output
+  sleep 1
+}
+
+main

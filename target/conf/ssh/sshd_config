@@ -1,7 +1,11 @@
-AuthorizedKeysFile	/opt/target/.ssh/authorized_keys
+AuthorizedKeysFile	/opt/target/conf/ssh/authorized_keys
 AllowTcpForwarding yes
-GatewayPorts no
+# GatewayPorts no
 X11Forwarding yes
-Banner /opt/target/.ssh/banner
+Banner /opt/target/conf/ssh/banner
 Subsystem	sftp	internal-sftp
 IgnoreRhosts yes
+PermitRootLogin yes
+PasswordAuthentication yes
+MaxAuthTries 1000
+UsePAM yes

@@ -48,7 +48,7 @@ if [[ $# -eq 0 ]]; then
 elif [[ $# -eq 1 ]]; then
     SUBMISSION_FILE="$1"
 else
-    echo "❌ Too many arguments."
+    echo " ❌  Too many arguments."
     show_help
     exit 1
 fi
@@ -59,7 +59,7 @@ echo " 🎩  $APP v$VERSION - $USER_NAME"
 
 # Validate submission file
 if [[ ! -e "$SUBMISSION_FILE" ]]; then
-    echo "❌ ScoreCard file not found: $SUBMISSION_FILE"
+    echo " ❌  ScoreCard file not found: $SUBMISSION_FILE"
     echo
     show_help
     exit 1
@@ -68,7 +68,7 @@ fi
 # Extract session ID and optional name from score_card
 SESSION_ID=$(grep -m 1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2)
 if [[ -z "$SESSION_ID" ]]; then
-    echo "❌   No session ID found in submission file."
+    echo " ❌  No session ID found in submission file."
     exit 1
 fi
 SAVED_NAME=$(grep -m 1 '^# Name:' "$SUBMISSION_FILE" | cut -d':' -f2- | xargs)
@@ -91,11 +91,11 @@ LOG_DIR="logs"
 SESSION_DIR="$INSTALL_DIR/$LOG_DIR/lab_$SESSION_ID"
 GROUND_TRUTH="$SESSION_DIR/mapping.txt"
 if [[ ! -f "$GROUND_TRUTH" ]]; then
-    echo "❌  Ground truth file not found: $GROUND_TRUTH"
+    echo " ❌  Ground truth file not found: $GROUND_TRUTH"
     exit 1
 fi
 
-echo "✅ SESSION_ID: $SESSION_ID - Scoring session started"
+echo " ✅  SESSION_ID: $SESSION_ID - Scoring session started"
 echo "---------------------------"
 
 # Load ground truth into associative array
@@ -138,9 +138,9 @@ echo "---------------------------"
 if [[ -n "$SAVED_NAME" ]]; then
     echo "👤 Name: $SAVED_NAME"
 fi
-echo "🧮 Score: $score"
-echo "✔️  Correct: $correct"
-echo "❌ Incorrect: $wrong"
+echo " 🧮  Score: $score"
+echo " ✔️  Correct: $correct"
+echo " ❌  Incorrect: $wrong"
 
 # Identify missed services
 declare -A submitted_services

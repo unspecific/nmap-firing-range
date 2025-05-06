@@ -32,7 +32,7 @@ launch_ssh() {
   setup-user -a -f "Victim $USERNAME" -g admin $USERNAME
   echo "$USERNAME:$PASSWORD" | chpasswd
   ssh-keygen -A
-  /usr/sbin/sshd -f /opt/target/conf/ssh/sshd_config -D
+  /usr/sbin/sshd -4 -f /opt/target/conf/ssh/sshd_config -D
 }
 
 launch_smb() {
@@ -44,14 +44,10 @@ launch_smb() {
 }
 
 launch_tftp() {
-  echo "$FLAG" > /srv/tftp/flag.txt
-  /usr/sbin/in.tftpd --foreground --secure /srv/tftp
+  echo "$FLAG" > /opt/target/conf/tftp/.flag
+  /usr/sbin/in.tftpd -l -R 4096:32767 -s /opt/target/conf/tftp/
 }
 
-launch_tftp() {
-  echo "$FLAG" > /srv/tftp/flag.txt
-  /usr/sbin/in.tftpd --foreground --secure /srv/tftp
-}
 
 launch_http() {
   HTTP_DIR="/opt/target/conf/http"
@@ -79,6 +75,9 @@ launch_snmp() {
   if sed -i "s/%COMMUNITY%/${COMMUNITY}/g" "$SNMP_CONF"; then
     logger "unable to update community"
   fi
+  if sed -i "s/:0.0.0.0:/:${IP_ADDRESS}:/g" "$SNMP_CONF"; then
+    logger "unable to update Bind IP"
+  fi
   if sed -i "s/%SESSION_ID%/${SESSION_ID}/g" "$SNMP_CONF"; then
     logger "unable to update community"
   fi
@@ -93,7 +92,6 @@ launch_emulator() {
   local proto="${SERVICE%-em}"
   if [[ -x /opt/target/service_emulator_v2.sh ]]; then
     /opt/target/service_emulator_v2.sh "$proto" "$FLAG" &
-    sleep infinity
   else
     logger "❌ Emulator script missing or not executable."
     exit 1
@@ -120,4 +118,4 @@ case "$SERVICE" in
   *)        launch_generic ;;
 esac
 
-sleep infinity
+/bin/bash

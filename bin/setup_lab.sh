@@ -165,12 +165,12 @@ install_scripts() {
     dest="$BIN_DIR/$script_name"
 
     if [[ ! -f "$src" ]]; then
-      log console "⚠️  Skipping missing script: $script_name"
+      log console " ⚠️  Skipping missing script: $script_name"
       continue
     fi
 
     record "$dest"
-    [[ -f "$dest" ]] && log console "⚠️  '$script_name' exists—overwriting."
+    [[ -f "$dest" ]] && log console " ⚠️  '$script_name' exists—overwriting."
     cp -f "$src" "$dest" || { log console "❌ Failed to copy $script_name"; exit 1; }
   done
 
@@ -211,7 +211,7 @@ create_symlinks() {
   done
 
   if [[ "$all_present" == true ]]; then
-    log console "🔗 Scripts already available in PATH; skipping symlink creation."
+    log console " 🔗  Scripts already available in PATH; skipping symlink creation."
     return 0
   fi
 
@@ -237,20 +237,20 @@ create_symlinks() {
       if [[ -L "$target" ]]; then
         existing=$(readlink "$target")
         if [[ "$existing" != "$script" ]]; then
-          log console "🔄 Updating symlink $target → $script"
+          log console " 🔄  Updating symlink $target → $script"
           ln -sf "$script" "$target"
           record "$target"
           created_any=true
         else
-          log silent "✅ $base_name already up-to-date."
+          log silent " ✅  $base_name already up-to-date."
         fi
 
       elif [[ -e "$target" ]]; then
-        log console "⚠️  Skipping $target — exists and is not a symlink."
+        log console " ⚠️   Skipping $target — exists and is not a symlink."
 
       else
         ln -s "$script" "$target"
-        log console "🔗 Linked $base_name → $target"
+        log console " 🔗  Linked $base_name → $target"
         record "$target"
         created_any=true
       fi
@@ -258,7 +258,7 @@ create_symlinks() {
 
     # if we did anything here, stop; otherwise try next dir
     $created_any && return
-    log console "⚠️  Nothing to do in $path_dir, trying next."
+    log console " ⚠️  Nothing to do in $path_dir, trying next."
   done
 
   log console "❌ No writable \$PATH entry found or all links up-to-date; skipping."
@@ -272,13 +272,13 @@ install_from_github() {
     exit 1
   }
 
-  log console "🔄 Cloning into $clone_dir…"
+  log console " 🔄  Cloning into $clone_dir…"
   git clone --depth=1 "$REPO_URL" "$clone_dir" || {
     log console "❌ Git clone failed"
     exit 1
   }
 
-  log console "♻️ Relaunching installer from fresh clone…"
+  log console " ♻️  Relaunching installer from fresh clone…"
   # Notice the /bin/ prefix here
   exec bash "$clone_dir/bin/setup_lab.sh" --unattended --force "$@"
 }
@@ -288,7 +288,7 @@ cleanup() {
   local exit_code=$?
   # only perform rollback if we errored *and* there’s something to roll back
   if (( exit_code != 0 )) && [[ -s "$TMP_ROLLBACK" ]]; then
-    log console "⚠️  Failure detected (exit $exit_code), rolling back…"
+    log console " ⚠️  Failure detected (exit $exit_code), rolling back…"
     # remove in reverse order
     tac "$TMP_ROLLBACK" | while read -r path; do
       log console "🗑  Removing $path"
@@ -296,7 +296,7 @@ cleanup() {
     done
     # also clean up any temp clone
     if [[ -n "${clone_dir:-}" && -d "$clone_dir" ]]; then
-      log console "🗑  Removing temp clone $clone_dir"
+      log console " 🗑  Removing temp clone $clone_dir"
       rm -rf "$clone_dir"
     fi
   fi
@@ -311,7 +311,7 @@ trap cleanup EXIT
 
 # ─── Installing the CONF_DIR to LAB_DIR ─────────────────────────────────
 install_conf() {
-  log console "📁 Installing conf directory…"
+  log console " 📁 Installing conf directory…"
 
   local src_dir="$REPO_ROOT/conf"
   if [[ ! -d "$src_dir" ]]; then
@@ -326,17 +326,17 @@ install_conf() {
     exit 1
   fi
 
-  cp -a "$src_dir"/. "$CONF_DIR"/ && log console "Successful copy" || {
+  cp -a "$src_dir"/. "$CONF_DIR"/ && log silent "Successful $CONF_DIR copy" || {
     log console "❌ Failed to copy configuration files"
     exit 1
   }
   chmod 755 $CONF_DIR/web_score_card/cgi-bin/*.cgi
-  log console "✅ Configuration files installed to $CONF_DIR"
+  log console " ✅  Configuration files installed to $CONF_DIR"
 }
 
 # ─── Installing the TARGET_DIR to LAB_DIR ─────────────────────────────────
 install_target() {
-  log console "📁 Installing target directory…"
+  log console " 📁  Installing target directory…"
 
   local src_dir="$REPO_ROOT/target"
   if [[ ! -d "$src_dir" ]]; then
@@ -352,16 +352,17 @@ install_target() {
     exit 1
   }
 
-  log console "✅ Target services installed to $TARGET_DIR"
+  log console " ✅  Target services installed to $TARGET_DIR"
 }
 
 # ─── Creating the NFR_GROUP and preparing LABDIR ──────────────────────────
 setup_group_access() {
-  log console "👥 Configuring group access and permissions…"
+  log console " 👥  Configuring group access and permissions…"
 
   local real_user="${SUDO_USER:-$USER}"
   if id -nG "$real_user" | grep -qw "$NFR_GROUP"; then
-    log console "✅ User '$real_user' is already a member of '${NFR_GROUP}'."
+    log console " ✅  User '$real_user' is already a member of '${NFR_GROUP}'."
+    chgrp "$NFR_GROUP" "$LOGFILE"
     return
   fi
 
@@ -383,32 +384,29 @@ setup_group_access() {
 
   # create the group if it doesn't exist
   if ! getent group "$NFR_GROUP" >/dev/null; then
-    log console "📦 Creating group '${NFR_GROUP}'..."
+    log console " 📦  Creating group '${NFR_GROUP}'..."
     groupadd "$NFR_GROUP"
     NO_GRP=false
   else
-    log console "ℹ️ Group '${NFR_GROUP}' already exists."
+    log console " ℹ️  Group '${NFR_GROUP}' already exists."
   fi
 
   # set ownership and permissions
-  log console "🔧 Setting permissions for $INSTALL_DIR..."
-  if [[ $NO_GRP != "true" ]]; then
+  log console " 🔧  Setting permissions for $INSTALL_DIR..."
+  if [[ $NO_GRP != true ]]; then
     chown -R root:"$NFR_GROUP" "$INSTALL_DIR"
   else 
     chown -R root:nogroup "$INSTALL_DIR"
   fi
-  find "$INSTALL_DIR" -type d -exec chmod 775 {} +
-  find "$INSTALL_DIR" -type f -exec chmod 664 {} +
-  find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 775 {} +
 
   # add the real user to the group if not already a member
   local real_user="${SUDO_USER:-$USER}"
   if id -nG "$real_user" | grep -qw "$NFR_GROUP"; then
-    log console "✅ User '$real_user' is already a member of '${NFR_GROUP}'."
+    log console " ✅  User '$real_user' is already a member of '${NFR_GROUP}'."
   else
-    log console "👤 Adding user '$real_user' to group '${NFR_GROUP}'..."
+    log console " 👤  Adding user '$real_user' to group '${NFR_GROUP}'..."
     usermod -aG "$NFR_GROUP" "$real_user"
-    log console "🔄 Log out and back in to apply group changes."
+    log console " 🔄  Log out and back in to apply group changes."
   fi
 }
 
@@ -425,7 +423,7 @@ determine_install_dir() {
   fi
 
   # 3) Prompt for the real install directory
-  read -rp "❓ Install not found at $INSTALL_DIR. Enter install directory to remove (or leave blank to auto-detect project folder): " resp
+  read -rp " ❓ Install not found at $INSTALL_DIR. Enter install directory to remove (or leave blank to auto-detect project folder): " resp
   if [[ -n "$resp" ]]; then
     INSTALL_DIR="$resp"
     return
@@ -437,7 +435,7 @@ determine_install_dir() {
   parent="$(dirname "$invoked_dir")"
   if [[ -d "$parent/bin" && -d "$parent/conf" && -d "$parent/target" ]]; then
     INSTALL_DIR="$parent"
-    log console "ℹ️  No install at default; assuming project root = $INSTALL_DIR"
+    log console " ℹ️  No install at default; assuming project root = $INSTALL_DIR"
     return
   fi
 
@@ -458,14 +456,14 @@ uninstall() {
   LOGFILE="./setup.log"
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
 
-  log console "🗑  Uninstalling Firing Range from $INSTALL_DIR…"
+  log console " 🗑  Uninstalling Firing Range from $INSTALL_DIR…"
   
   if [[ ! -d "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
     log console "❌ No installation detected in $INSTALL_DIR. Nothing to uninstall."
     exit 1
   fi
 
-  log console "🚨 Uninstalling Firing Range..."
+  log console " 🚨  Uninstalling Firing Range..."
   if [[ -d "$LOG_DIR" ]]; then
     if [[ "$FORCE" == true ]]; then
       backup_logs="y"
@@ -485,24 +483,24 @@ uninstall() {
   if [[ -f "$ROLLBACK_FILE" ]]; then
     while read -r line; do
       if [[ -L "$line" ]]; then
-        log console "🔗 Removing symlink: $line"
+        log console " 🔗  Removing symlink: $line"
         rm -f "$line"
       elif [[ -e "$line" ]]; then
-        log console "🗑️  Removing file: $line"
+        log console " 🗑️  Removing file: $line"
         rm -f "$line"
       fi
     done < "$ROLLBACK_FILE"
   fi
 
-  log console "🧹 Removing directory: $INSTALL_DIR"
+  log console " 🧹  Removing directory: $INSTALL_DIR"
   rm -rf "$INSTALL_DIR"
 
   if getent group "$NFR_GROUP" &>/dev/null; then
-    log console "👥 Removing group: $NFR_GROUP"
+    log console " 👥  Removing group: $NFR_GROUP"
     groupdel "$NFR_GROUP"
   fi
 
-  log console "✅ Uninstallation complete."
+  log console " ✅  Uninstallation complete."
   exit 0
 }
 
@@ -595,7 +593,7 @@ if [[ "$UNINSTALL" == true ]]; then
   uninstall
   exit 0
 elif [[ "$UPGRADE" == true ]]; then
-  log console "🔄 Upgrade requested: pulling from GitHub…"
+  log console " 🔄  Upgrade requested: pulling from GitHub…"
   install_from_github "$@"
   exit 0
 fi
@@ -605,13 +603,13 @@ check_dependencies
 check_lab_dependencies
 
 if [[ "$(pwd)" == "$INSTALL_DIR"* ]]; then
-  echo "⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
+  echo " ⚠️  Please run setup_lab.sh from outside $INSTALL_DIR to avoid overwrite conflicts."
   exit 1
 fi
 
 mkdir -p "$LOG_DIR"
-log silent "$APP v$VERSION initializing..."
-log console "🚀 Starting $APP v$VERSION..."
+log silent "  $APP v$VERSION initializing..."
+log console " 🚀  Starting $APP v$VERSION..."
 
 
 # ─── Detect existing install & scripts ───────────────────────────────
@@ -621,9 +619,9 @@ INSTALL_MODE=""
 # 1) Check for an existing install
 log console "Checking for existing installation in $INSTALL_DIR..."
 if check_local installed "$INSTALL_DIR" && [[ "$FORCE" != true ]]; then
-  log console "🚧  Installation detected at $INSTALL_DIR."
+  log console " 🚧   Installation detected at $INSTALL_DIR."
   if [[ "$UNATTENDED" == true ]]; then
-    log console "✅  Unattended mode: skipping install (existing install). Use --force to overwrite."
+    log console " ✅  Unattended mode: skipping install (existing install). Use --force to overwrite."
     exit 0
   else 
     read -rp "Update existing installation? (y/n): " resp
@@ -652,21 +650,21 @@ fi
 # 3) Honor command-line overrides
 if [[ "$UPGRADE" == true ]]; then
   INSTALL_MODE="github"
-  log console "🔄  --upgrade: will fetch from GitHub."
+  log console " 🔄  --upgrade: will fetch from GitHub."
 fi
 
 # 4) Final fallback for GitHub install
 if [[ -z "$INSTALL_MODE" ]]; then
   if [[ "$UNATTENDED" == true ]] && check_local staged; then
     INSTALL_MODE="local"
-    log console "🌐  Unattended mode: defaulting to local install."
+    log console " 🌐  Unattended mode: defaulting to local install."
   elif check_local staged; then
     log console " 🌐  "
     read -rp "Install from local source? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
       INSTALL_MODE="local"
     else
-      log console "🌐  Unattended mode: Can't find local files. $(pwd)"
+      log console " 🌐  Unattended mode: Can't find local files. $(pwd)"
       read -rp "Install from GitHub? (y/n): " resp
       if [[ "$resp" =~ ^[Yy]$ ]]; then
         INSTALL_MODE="github"
@@ -676,7 +674,7 @@ if [[ -z "$INSTALL_MODE" ]]; then
       fi
     fi
   else
-    log console "🌐  Unattended mode: Can't find local files. $(pwd)"
+    log console " 🌐  Unattended mode: Can't find local files. $(pwd)"
     read -rp "Install from GitHub? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
       INSTALL_MODE="github"
@@ -690,11 +688,11 @@ fi
 # 5) Act on the chosen mode
 case "$INSTALL_MODE" in
   local)
-    log console "🚀  Installing from local source..."
+    log console " 🚀  Installing from local source..."
     # …insert your local-install routine here…
     ;;
   github)
-    log console "🌐  Fetching and installing from GitHub…"
+    log console " 🌐  Fetching and installing from GitHub…"
     install_from_github "$@"
     # install_from_github should relaunch and exit
     ;;
@@ -707,18 +705,24 @@ esac
 
 create_directories "$@"
 install_scripts "$@"
+log console " 📁  Scripts installed to: $BIN_DIR"
 install_conf
+log console " 📁  Host configs installed to: $CONF_DIR"
 install_target
+log console " 📁  Target configs installed to: $TARGET_DIR"
 setup_group_access
 create_symlinks "$@"
 
-log console "✅ Firing Range setup completed successfully."
-log console "📁 Scripts installed to: $BIN_DIR"
-log console "📄 Symlinks (if created) are available in PATH directories."
-log console "📝 Setup log saved at: $LOGFILE"
-log console "✅ Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
-if [[ $NO_GRP != "true" ]]; then
+log console " ✅  Firing Range setup completed successfully."
+log console " 📝  Setup log saved at: $LOGFILE"
+log console " ✅  resetting permissions after install"
+if [[ $NO_GRP != true ]]; then
   chgrp $NFR_GROUP $LOGFILE
 fi
+find "$INSTALL_DIR" -type d -exec chmod 775 {} +
+find "$INSTALL_DIR" -type f -exec chmod 664 {} +
+find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 775 {} +
+find "$INSTALL_DIR/conf" "$INSTALL_DIR/target/conf" -type f -name "*.cgi" -exec chmod 775 {} +
 chmod 664 $LOGFILE
+log console " ✅  Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
 echo

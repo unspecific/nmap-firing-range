@@ -1,43 +1,103 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="TCP:6667 tcp:6697:tls"               # The port this service listens on
-EM_VERSION="2.6"               # Optional version identifier
+EM_PORT="tcp:6667 tcp:6697:tls"
+EM_VERSION="2.6"
 EM_DAEMON="FakeIRC"
-EM_DESC="IRCd server"  # Short description for listing output
+EM_DESC="IRCd server with hidden paths to the flag"
 
+HOST="irc.fakecorp.net"
+FLAG="${FLAG:-flag{irc-secret-discovered}}"
 
-echo -e ":irc.fakecorp.net 001 user :Welcome to $EM_DAEMON!\r"
-echo -e ":irc.fakecorp.net 002 user :Your host is $EM_DAEMON $EM_VERSION, running on Bash\r"
-echo -e ":irc.fakecorp.net 003 user :This server was created for you\r"
-echo -e ":irc.fakecorp.net 004 user $EM_DAEMON $EM_VERSION o o\r"
-echo -e ":irc.fakecorp.net 375 user :- irc.fakecorp.net Message of the Day -\r"
-echo -e ":irc.fakecorp.net 372 user :- Welcome to the challenge.\r"
-echo -e ":irc.fakecorp.net 372 user :- $FLAG\r"
-echo -e ":irc.fakecorp.net 376 user :End of /MOTD command.\r"
+client_nick=""
+client_user=""
+joined_channels=()
 
-joined=false
+# Send a raw line to the client
+send_line() { printf "%b\r\n" "$1"; }
 
-while IFS= read -r line; do
-    echo "[*] IRC received: $line"
+# Numeric replies
+send_numeric() {
+  local num=$1; shift
+  send_line ":$HOST $num ${client_nick:-*} $*"
+}
 
-    if [[ "$line" =~ ^NICK ]]; then
-        echo -e ":irc.fakecorp.net 001 ${line#NICK } :Welcome\r"
-    elif [[ "$line" =~ ^USER ]]; then
-        echo -e ":irc.fakecorp.net 001 user :Login accepted\r"
-    elif [[ "$line" =~ ^JOIN ]]; then
-        channel=$(echo "$line" | cut -d' ' -f2)
-        echo -e ":user!user@host JOIN $channel\r"
-        echo -e ":irc.fakecorp.net 332 user $channel :Welcome to $channel\r"
-        echo -e ":irc.fakecorp.net 333 user $channel admin 1234567890\r"
-        echo -e ":irc.fakecorp.net NOTICE user $FLAG\r"
-        joined=true
-    elif [[ "$line" =~ ^PRIVMSG ]]; then
-        echo -e ":irc.fakecorp.net NOTICE user :Sorry, no DMs allowed.\r"
-    elif [[ "$line" =~ ^QUIT ]]; then
-        echo -e ":irc.fakecorp.net ERROR :Closing Link: user (Quit)\r"
-        break
-    else
-        echo -e ":irc.fakecorp.net 421 user ${line%% *} :Unknown command\r"
-    fi
-done
+greet() {
+  send_numeric 001 "Welcome to $EM_DAEMON, ${client_nick:-newbie}"
+  send_numeric 002 "Your host is $EM_DAEMON, running version $EM_VERSION"
+  send_numeric 003 "This server was created just for you!"
+  send_numeric 004 "$EM_DAEMON $EM_VERSION o o"
+  send_numeric 375 "- Message of the Day -"
+  send_numeric 372 "- Welcome to the challenge IRC!"
+  send_numeric 372 "- Type /join #general or /join #secret"
+  send_numeric 376 "End of MOTD"
+}
+
+handle_nick() {
+  client_nick="$2"
+  send_line ":$HOST NICK ${client_nick}"
+}
+
+handle_user() {
+  client_user="$2"
+  send_numeric 001 "User ${client_nick} registered as ${client_user}"
+}
+
+handle_join() {
+  local chan="$2"
+  joined_channels+=( "$chan" )
+  send_line ":${client_nick}!${client_user}@${HOST} JOIN $chan"
+  send_numeric 332 "$chan :Topic for $chan"
+  send_numeric 333 "$chan admin  $(date +%s)"
+  if [[ "$chan" == "#secret" ]]; then
+    # reveal the flag quietly
+    send_line ":$HOST NOTICE ${client_nick} :Pssst… the flag is $FLAG"
+  else
+    send_line ":$HOST NOTICE ${client_nick} :Welcome to $chan! Try /msg $HOST VERSION"
+  fi
+}
+
+handle_privmsg() {
+  local target="$2"; shift 2; local msg="$*"
+  if [[ "$msg" =~ ^!flag$ ]] && [[ " ${joined_channels[*]} " =~ " #general " ]]; then
+    # public flag hint
+    send_line ":$HOST PRIVMSG #general :${client_nick}, the real flag is in #secret!"
+  elif [[ "$target" == "$HOST" && "${msg^^}" =~ ^VERSION$ ]]; then
+    # CTCP VERSION reveal
+    send_line ":$HOST NOTICE ${client_nick} :\001VERSION $EM_DAEMON v$EM_VERSION — flag: $FLAG\001"
+  else
+    # echo back
+    send_line ":$HOST PRIVMSG ${target} :I heard \"$msg\""
+  fi
+}
+
+handle_ping() {
+  send_line "PONG $HOST"
+}
+
+handle_quit() {
+  send_line ":$HOST ERROR :Closing Link: ${client_nick} (Quit)"
+  exit 0
+}
+
+main() {
+  greet
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Very basic parse
+    cmd=${line%% *}
+    args=${line#* }
+    case "${cmd^^}" in
+      NICK)   handle_nick $cmd $args ;;
+      USER)   handle_user $cmd $args ;;
+      JOIN)   handle_join $cmd $args ;;
+      PRIVMSG) handle_privmsg $cmd $args ;;
+      PING)   handle_ping ;;
+      QUIT)   handle_quit ;;
+      *)      send_numeric 421 "$cmd :Unknown command" ;;
+    esac
+  done
+}
+
+main

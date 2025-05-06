@@ -196,16 +196,16 @@ check_dependencies() {
     fi
 
     # Proceed to load image from archive
-    log console "ℹ️   Loading Docker image '$image' from $tgz_file..."
+    log console " ℹ️   Loading Docker image '$image' from $tgz_file..."
     if [[ -f "$tgz_file" ]]; then
       if docker load -i "$tgz_file"; then
-        log console "✅  Successfully loaded '$image' from $tgz_file."
+        log console " ✅  Successfully loaded '$image' from $tgz_file."
       else
-        log console "❌  Failed to load '$image' from $tgz_file."
+        log console " ❌  Failed to load '$image' from $tgz_file."
         missing=1
       fi
     else
-      log console "❌  Archive '$tgz_file' not found; cannot load '$image'."
+      log console " ❌  Archive '$tgz_file' not found; cannot load '$image'."
       missing=1
     fi
   fi
@@ -450,7 +450,7 @@ load_session_file() {
 }
 
 load_emulated_services() {
-  log console "🔎 Loading emulated services..."
+  log console " 🔎  Loading emulated services..."
   local services_dir="$LAB_DIR/target/services"
   local script svc port_meta desc version daemon tmp_port
 
@@ -483,9 +483,9 @@ load_emulated_services() {
       services["${svc}-em"]="$tmp_port"
       services_meta["${svc}-em"]="$version:$daemon:$desc"
       SERVICE_LIST+=("$svc")
-      log silent "✔️  Loaded emulator: ${svc}-em on $tmp_port"
+      log silent " ✔️  Loaded emulator: ${svc}-em on $tmp_port"
     else
-      log silent "⚠️  Skipping emulator: $svc (missing EM_PORT)"
+      log silent " ⚠️  Skipping emulator: $svc (missing EM_PORT)"
     fi
   done
 
@@ -559,7 +559,7 @@ parse_meta_var() {
 
   # 2) Grab the last matching line, allow whitespace around “=”
   if ! line=$(grep -E "^[[:space:]]*${var}[[:space:]]*=" "$file" | tail -n1); then
-    log silent "⚠️  No ${var}= entry in $file"
+    log silent " ⚠️  No ${var}= entry in $file"
     printf '\n'
     return 0
   fi
@@ -1160,6 +1160,7 @@ EOF
   cat >> "$compose_file" <<EOF
     environment:
       - SESSION_ID=$SESSION_ID
+      - IP_ADDRESS=$rand_ip
       - HOSTNAME=$svc_hostname
       - USERNAME=$SESS_USER
       - PASSWORD=$SESS_PASS
@@ -1178,7 +1179,7 @@ EOF
   cat >> "$compose_file" <<EOF
     command: sh -c "/opt/target/launch_target.sh; /bin/bash"
     volumes:
-      - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro
+      - $SESSION_DIR/target/conf/rsyslog/rsyslog.conf:/etc/rsyslog.conf:ro
       - $SESSION_DIR/$TARGET_DIR:/opt/target:rw
       - $SESSION_DIR/$TARGET_DIR/conf/resolv.conf:/etc/resolv.conf
       - $SESSION_DIR/$LOG_DIR/services:/var/log/services:rw
@@ -1210,7 +1211,7 @@ EOF
 log silent "✔ Finished creating Compose file: $compose_file"
 
 if docker compose -f "$compose_file" config --quiet; then
-  log console "✅ Docker-Compose config valid, launching stack…"
+  log console " ✅  sDocker-Compose config valid, launching stack…"
 else
   log console "❌ Docker-Compose config is invalid – aborting!"
   exit 1
@@ -1250,7 +1251,7 @@ fi
 log console "**** Targets have been launched. ****\r\n    **** The range is hot. ****"
 
 # ─── Show running containers ────────────────────────────────────────────────
-log silent "✅ Final container list:"
+log silent " ✅  Final container list:"
 if DOCKER_PS=$($COMPOSE_CMD ps --format 'table {{.Names}}\t{{.Ports}}' 2>&1); then
   log silent "$DOCKER_PS"
 else
@@ -1264,4 +1265,4 @@ echo
 
 # ─── Report duration ───────────────────────────────────────────────────────
 duration=$SECONDS
-log console "⏱️  Lab launched in $duration seconds"
+log console " ⏱️  Lab launched in $duration seconds"
