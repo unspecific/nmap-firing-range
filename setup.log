@@ -3,3 +3,13 @@
 [2025-05-03 23:19:43] [NFR-SetupLab v2.2.9] 🧹 Removing directory: /opt/firing-range
 [2025-05-03 23:19:43] [NFR-SetupLab v2.2.9] 👥 Removing group: nfrlab
 [2025-05-03 23:19:43] [NFR-SetupLab v2.2.9] ✅ Uninstallation complete.
+[2025-05-04 21:29:54] [NFR-SetupLab v2.2.9] 🗑  Uninstalling Firing Range from /opt/firing-range…
+[2025-05-04 21:29:54] [NFR-SetupLab v2.2.9] 🚨 Uninstalling Firing Range...
+[2025-05-04 21:29:55] [NFR-SetupLab v2.2.9] 🧹 Removing directory: /opt/firing-range
+[2025-05-04 21:29:55] [NFR-SetupLab v2.2.9] 👥 Removing group: nfrlab
+[2025-05-04 21:29:55] [NFR-SetupLab v2.2.9] ✅ Uninstallation complete.
+[2025-05-05 10:21:48] [NFR-SetupLab v2.2.9] 🗑  Uninstalling Firing Range from /opt/firing-range…
+[2025-05-05 10:21:48] [NFR-SetupLab v2.2.9] 🚨 Uninstalling Firing Range...
+[2025-05-05 10:21:50] [NFR-SetupLab v2.2.9] 🧹 Removing directory: /opt/firing-range
+[2025-05-05 10:21:50] [NFR-SetupLab v2.2.9] 👥 Removing group: nfrlab
+[2025-05-05 10:21:50] [NFR-SetupLab v2.2.9] ✅ Uninstallation complete.
