@@ -149,7 +149,7 @@ install_scripts() {
 
   # Prompt once unless forced or unattended
   if [[ "$FORCE" != true && "$UNATTENDED" != true ]]; then
-    read -rp "🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
+    read -rp " 🛠️  Do you want to update the Firing Range scripts in $BIN_DIR? (y/n): " confirm_all
     if [[ ! "$confirm_all" =~ ^[Yy]$ ]]; then
       log silent "User declined to update scripts."
       return

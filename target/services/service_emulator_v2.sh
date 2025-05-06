@@ -39,8 +39,7 @@ if [[ -z "$SERVICE" || -z "$FLAG" ]]; then
   echo "Usage: $0 <service> <flag>"
   exit 1
 fi
-
-emulator="${SERVICE}.sh"
+emulator="${SERVICE%-em}.sh"
 if [[ ! -f $emulator ]]; then
   echo " ❌  Emulator script $emulator does."
   exit 1

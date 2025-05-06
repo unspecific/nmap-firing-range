@@ -1248,7 +1248,6 @@ if ! $COMPOSE_CMD -f "$compose_file" start >/dev/null 2>&1; then
   exit 1
 fi
 
-log console "**** Targets have been launched. ****\r\n    **** The range is hot. ****"
 
 # ─── Show running containers ────────────────────────────────────────────────
 log silent " ✅  Final container list:"
@@ -1258,9 +1257,11 @@ else
   log silent "⚠️  Could not retrieve container list"
 fi
 
-log console " 🎉  Your Nmap Firing Range is ready for testing!"
+log console " 🎉  Your Nmap Firing Range is ready for testing!\n\r"
+log console "    **** Targets have been launched. ****\r\n          **** The range is hot. ****"
 log console " Start your adventure with this command:"
 log console "     nmap -v $SUBNET.0/24"
+log console "         or visit http://console.nfr.lab/"
 echo
 
 # ─── Report duration ───────────────────────────────────────────────────────

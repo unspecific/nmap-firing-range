@@ -1,25 +1,24 @@
 #!/bin/bash
 logger "Launching launch_target on $HOSTNAME"
 echo "------------- New host $HOSTNMAE" >> /opt/target/ENV
-env >> /opt/target/ENV
-
-VERSION=1.7
-
-# ─── Input Variables ───────────────────────────────────────────────────────────
-SERVICE="${SERVICE}"
-FLAG="${FLAG}"
-PORT="${PORT:-default}"
-USERNAME="${USERNAME:-user}"
-PASSWORD="${PASSWORD:-pass}"
-
-logger "🏁 Launching target service: $SERVICE"
+launch_log="/opt/target/$HOSTNAME.launch_log"
+touch "$launch_log"
 
 trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
+
+log() {
+  local message="$1"
+  local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
+  local logline="$timestamp $message"
+
+  # finally append
+  echo "$logline" >> "$launch_log"
+}
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
 
 launch_console(){
-  echo "Launching Console Apps"
+  log "Launching Console Apps"
   tcpdump -i any -nn > /var/log/tcpdump &
   thttpd -dd /opt/web -c "/cgi-bin/*" -D & 
   ncat --listen --ssl --ssl-cert $SSL_CERT_PATH --ssl-key $SSL_KEY_PATH --sh-exec "ncat 127.0.0.1 80" -k -p 443 &
@@ -28,6 +27,7 @@ launch_console(){
 }
 
 launch_ssh() {
+  log "Launching SSHd"
   echo "$FLAG" > /etc/motd
   setup-user -a -f "Victim $USERNAME" -g admin $USERNAME
   echo "$USERNAME:$PASSWORD" | chpasswd
@@ -36,6 +36,7 @@ launch_ssh() {
 }
 
 launch_smb() {
+  log "Launching Samba"
   mkdir -p /opt/share
   echo "$FLAG" > /opt/share/flag.txt
   adduser -D "$USERNAME"
@@ -44,12 +45,14 @@ launch_smb() {
 }
 
 launch_tftp() {
+  log "Launching tftp"
   echo "$FLAG" > /opt/target/conf/tftp/.flag
   /usr/sbin/in.tftpd -l -R 4096:32767 -s /opt/target/conf/tftp/
 }
 
 
 launch_http() {
+  log "Launching HTTPd"
   HTTP_DIR="/opt/target/conf/http"
   echo "$FLAG" > "$HTTP_DIR/.flag"
   find "$HTTP_DIR" -type f -exec chmod 744 {} \;
@@ -61,10 +64,12 @@ launch_http() {
 }
 
 launch_smtp() {
+  log "Launching SMTP"
   smtpd -F
 }
 
 launch_snmp() {
+  log "Launching SNMP"
   rsyslogd
   SNMP_CONF="/opt/target/conf/snmp/snmpd.conf"
   echo "$FLAG" > "/opt/target/conf/snmp/.flag"
@@ -89,22 +94,24 @@ launch_snmp() {
 
 
 launch_emulator() {
+  log "Launching Service Emulator"
   local proto="${SERVICE%-em}"
-  if [[ -x /opt/target/service_emulator_v2.sh ]]; then
-    /opt/target/service_emulator_v2.sh "$proto" "$FLAG" &
+  if [[ -x /opt/target/services/service_emulator.sh ]]; then
+    /opt/target/services/service_emulator.sh "$proto" "$FLAG" &
   else
-    logger "❌ Emulator script missing or not executable."
+    log " ❌  Emulator script missing or not executable."
     exit 1
   fi
 }
 
 launch_generic() {
-  echo "❌ Unknown service: $SERVICE"
+  log " ❌  Unknown service: $SERVICE"
   exit 1
 }
 
 # ─── Dispatcher ────────────────────────────────────────────────────────────────
-
+log "Launching target services"
+log $(env)
 case "$SERVICE" in
   console)  launch_console ;;
   ssh)      launch_ssh ;;
@@ -118,4 +125,4 @@ case "$SERVICE" in
   *)        launch_generic ;;
 esac
 
-/bin/bash
+sleep infinity
