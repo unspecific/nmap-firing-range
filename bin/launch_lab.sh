@@ -635,10 +635,8 @@ add_hosts() {
 }
 
 add_zone_entry() {
-  local ip=$1 host=$2 rev
-  echo "$ip    $host" >> "$ZONEFILE"
-  # rev=$(awk -F. '{print $4"."$3"."$2"."$1}' <<<"$ip")
-  # echo "ptr-record=${rev}.in-addr.arpa,$host" >> "$ZONEFILE"
+  local ip=$1 host=$2
+  echo "host-record=$ip,$host,3600" >> "$DNSMASQ_CONF"
 }
 
 get_image_for_service() {
@@ -669,29 +667,6 @@ reverse_ip() {
   local ip="$1"
   # e.g. “192.168.200.254” → “254.200.168.192”
   awk -F. '{ print $4"."$3"."$2"."$1 }' <<<"$ip"
-}
-
-# ─── Build the dnsmasq “addn-hosts” zone file ────────────────────────────────
-create_zonefile() {
-  local zonefile="$ZONEFILE"
-  local host_ip="${SUBNET}.254"
-  local console_ip="${SUBNET}.2"
-  local host_rev=$(reverse_ip "$host_ip")
-  local console_rev=$(reverse_ip "$console_ip")
-
-  # make sure the directory is there
-  mkdir -p "$(dirname "$zonefile")"
-
-  # overwrite (not append) so we start fresh
-  cat >"$zonefile" <<EOF
-# dnsmasq extra hosts for session $SESSION_ID
-# Forward entries
-$host_ip    host.nfr.lab
-$console_ip console.nfr.lab
-
-EOF
-
-  log silent "✔ Wrote dnsmasq zone file: $zonefile"
 }
 
 # ─── responding to HELP -h ────────────────────────────────
@@ -819,7 +794,7 @@ NETWORK="range-$SESSION_ID"
 NUM_SERVICES="${NUM_SERVICES:-5}"
 CA_DIR="$SESSION_DIR/$CONF_DIR/$CERT_DIR"
 SYSLOG_FILE="$SESSION_DIR/$LOG_DIR/containers"
-ZONEFILE="$SESSION_DIR/$CONF_DIR/nfr.lab.zone"
+DNSMASQ_CONF="$SESSION_DIR/$CONF_DIR/console/dnsmasq.conf"
 HOSTS="/etc/hosts"
 declare -gA USED_HOSTNAMES=()
 
@@ -935,8 +910,6 @@ else
   exit 1
 fi
 
-create_zonefile
-
 log silent " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 log console " 🚀  Launching random lab at $SESSION_TIME"
 log console " 🆔  SESSION_ID $SESSION_ID"
@@ -949,7 +922,6 @@ session=$SESSION_ID
 EOF
 
 log console " 📊  Score Card Updated $SESSION_DIR/$SCORECARD"
-
 
 # ─── TLS Setup ───────────────────────────────────────────────────────────────
 if [[ "$skip_tls" != true ]]; then
@@ -1038,6 +1010,8 @@ services_map="$SESSION_DIR/services.map"
 
 # ensure the host entry exists
 add_hosts "${svc}.nfr.lab" "${SUBNET}.2"
+add_zone_entry "${svc}.nfr.lab" "${SUBNET}.2"
+add_zone_entry "host.nfr.lab" "${SUBNET}.254"
 
 # append a nicely indented YAML block
 cat >> "$compose_file" <<EOF
@@ -1061,7 +1035,6 @@ cat >> "$compose_file" <<EOF
       - ${SESSION_DIR}/${CONF_DIR}/certs/${svc}/${svc}.crt:/etc/certs/${svc}.nfr.lab/${svc}.nfr.lab.crt:ro
       - ${SESSION_DIR}/${CONF_DIR}/console/rsyslog.conf:/etc/rsyslog.conf:ro
       - ${SESSION_DIR}/${CONF_DIR}/console/dnsmasq.conf:/etc/dnsmasq.conf:ro
-      - ${ZONEFILE}:/etc/nfr.lab.zone:ro
       - ${SESSION_DIR}/${SCORE_CARD}:/etc/score_card:rw
       - ${SESSION_DIR}/mapping.txt:/etc/mapping.txt:rw
       - ${SESSION_DIR}/${TARGET_DIR}/score.json:/etc/score.json:rw
@@ -1258,6 +1231,7 @@ log console " 🎉  Your Nmap Firing Range is ready for testing!\n\r"
 log console "    **** Targets have been launched. ****\r\n          **** The range is hot. ****"
 log console " Start your adventure with this command:"
 log console "     nmap -v $SUBNET.0/24"
+log console "  try adding --dns-servers $SUBNET.2 for nme resolution.
 log console "         or visit http://console.nfr.lab/"
 echo
 

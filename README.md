@@ -61,64 +61,7 @@ What started as a simple idea has evolved into a flexible, containerized lab env
 - The program is extensible.  The emulated service can be dropped into a folder to add more service options.
 
 
-Troubleshoot Targets:
+I have included a [list of available servises](./nfr-target-services.txt) to show what services are supported.  As of now not ll work 100% of the time.  That is the next task.
 
+I have also included a [sample scan](./sample_scan.txt)
 
-```
- 📋 Target Service Modules:
- ────────────────────────────────────────────────────────────────────
-  Service     	Daemon    	Port          Status
-  ───────     	──────────  ────────	    ─────────────────────
-  smb         	Samba     	tcp:139
-  smb         	Samba     	tcp:445
-  smb         	Samba     	udp:137
-  smb         	Samba     	udp:138
-  snmp        	net-snmp  	udp:161
-  tftp        	tftp-hpa  	udp:69
-  imap        	imap4d    	tcp:143
-  imap        	imap4d    	tcp:993:tls
-  pop         	pop3d     	tcp:110
-  pop         	pop3d     	tcp:995:tls
-  ssh         	OpenSSHd  	tcp:22
-  ftp         	vsFTP     	tcp:21
-  ftp         	vsFTP     	tcp:990:tls
-  smtp        	opensmtp  	tcp:25
-  smtp        	opensmtp  	tcp:465:tls
-  http        	thttpd    	tcp:80
-  http        	thttpd    	tcp:443:tls
-
- 📋 Emulated Service Modules:
- ────────────────────────────────────────────────────────────────────
-  Service     	Daemon    	Port    	    Status
-  ───────       ──────────  ────────      ─────────────────────
-  api-em      	FakeAPI   	tcp:8080	
-  api-em      	FakeAPI   	tcp:8443:tls
-  crap-em     	Unspecific	tcp:9999
-  crap-em     	Unspecific	tcp:9443:tls
-  finger-em   	FakeFinger	tcp:79
-  ftp-em      	FakeFTPd  	tcp:21
-  ftp-em      	FakeFTPd  	tcp:990:tls
-  http-em     	FakeHTTPd 	tcp:80
-  http-em     	FakeHTTPd 	tcp:443:tls
-  imap-em     	FakeIMAPd 	tcp:143
-  imap-em     	FakeIMAPd 	tcp:993:tls
-  irc-em      	FakeIRC   	TCP:6667
-  irc-em      	FakeIRC   	tcp:6697:tls
-  ldap-em     	FakeLDAP  	tcp:389
-  ldap-em     	FakeLDAP  	tcp:636:tls
-  memcached-em	memfaked  	tcp:11211
-  nntp-em     	FakeNNTP  	tcp:119
-  nntp-em     	FakeNNTP  	tcp:563:tls
-  pop3-em     	FakePOP3d 	tcp:110
-  pop3-em     	FakePOP3d 	tcp:995:tls
-  redis-em    	FakeRedis 	tcp:6379
-  redis-em    	FakeRedis 	tcp:6380:tls
-  smtp-em     	FakeSMTP  	tcp:25
-  smtp-em     	FakeSMTP  	tcp:465:tls
-  snmp-em     	FakeSNMP  	tcp:161
-  snmp-em     	FakeSNMP  	udp:161
-  socks4-em   	FakeSOCKS4	tcp:1080
-  socks4-em   	FakeSOCKS4	tcp:1443
-  telnet-em   	FakeTELNETd	tcp:23
-  telnet-em   	FakeTELNETd	tcp:992:tls
-```
