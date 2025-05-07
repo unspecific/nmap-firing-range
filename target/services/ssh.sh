@@ -3,14 +3,29 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ─── Emulator Metadata ─────────────────────────────────────────────────────
-EM_PORT="tcp:22 tcp:2222:tls"      # SSH ports
-EM_VERSION="2.4"                   # Fake SSH version
-EM_DAEMON="FakeSSHd"
+EM_PORT="tcp:22"      # SSH ports
+EM_VERSION="2.666"                   # Fake SSH version
+EM_DAEMON="SSH"
 EM_DESC="SSH banner + pseudo shell login"
+
+ssh_daemons=(
+  AsyncSSH
+  OpenSSH
+  moxa
+  SSH
+  TECHNICOLOR_SW
+  CompleteFTP
+  MS
+  NA
+  EchoSystem_Server
+  SERVER
+)
+
+randaemon=$(printf "%s\n" "${ssh_daemons[@]}" | shuf -n1)
 
 # Send SSH version banner
 # Clients (or nmap) will see this as an SSH service fingerprint
-printf "SSH-2.0-%s_%s\r\n" "$EM_DAEMON" "$EM_VERSION"
+printf "SSH-2.0-%s_%s\r\n" "$randaemon" "$EM_VERSION"
 
 # Optional pause for scanners
 sleep 1

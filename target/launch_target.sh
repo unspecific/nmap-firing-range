@@ -1,6 +1,5 @@
 #!/bin/bash
-logger "Launching launch_target on $HOSTNAME"
-echo "------------- New host $HOSTNMAE" >> /opt/target/ENV
+emulator="/opt/target/services/service_emulator.sh"
 launch_log="/opt/target/$HOSTNAME.launch_log"
 touch "$launch_log"
 
@@ -9,10 +8,10 @@ trap "echo '🧹 Cleaning up service: $SERVICE'; exit 0" SIGINT SIGTERM
 log() {
   local message="$1"
   local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
-  local logline="$timestamp $message"
+  local logline="$timestamp $0 $message"
 
   # finally append
-  echo "$logline" >> "$launch_log"
+  echo -e "$logline" >> "$launch_log"
 }
 
 # ─── Launch Routines ───────────────────────────────────────────────────────────
@@ -94,10 +93,10 @@ launch_snmp() {
 
 
 launch_emulator() {
-  log "Launching Service Emulator"
-  local proto="${SERVICE%-em}"
-  if [[ -x /opt/target/services/service_emulator.sh ]]; then
-    /opt/target/services/service_emulator.sh "$proto" "$FLAG" &
+  local serv="${SERVICE%-em}"
+  if [[ -x "$emulator" ]]; then
+  log "Launching Service Emulator\r\n\t\t$emulator $serv $FLAG"
+    "$emulator" "$serv" "$FLAG" 
   else
     log " ❌  Emulator script missing or not executable."
     exit 1
@@ -110,8 +109,8 @@ launch_generic() {
 }
 
 # ─── Dispatcher ────────────────────────────────────────────────────────────────
-log "Launching target services"
-log $(env)
+log "Launching target service $SERVICE"
+log "$(env)"
 case "$SERVICE" in
   console)  launch_console ;;
   ssh)      launch_ssh ;;
