@@ -16,15 +16,7 @@ What started as a simple idea has evolved into a flexible, containerized lab env
   Each lab session creates a /24 network in 192.168.0.0/16, and each host has a random IP, ensuring that scans mimic real-world unpredictability. This helps participants move beyond relying on standard ports and easily recognizable service signatures.
 
 - **Service Emulation:**  
-  A wide range of classic network services are emulated, including:
-  - Finger
-  - FTP
-  - HTTP
-  - LDAP
-  - SMTP
-  - Telnet
-  - DNS
-  - Custom or vulnerable services
+  A wide range of classic network services are emulated.  Look [here](nfr-target-services.txt) for the current lst.
 
   These emulated services will fingerprint as the service for nmap, can support brute forcing, and other protocol specific tricks. 
 
