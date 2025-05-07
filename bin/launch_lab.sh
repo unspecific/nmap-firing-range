@@ -637,8 +637,8 @@ add_hosts() {
 add_zone_entry() {
   local ip=$1 host=$2 rev
   echo "$ip    $host" >> "$ZONEFILE"
-  rev=$(awk -F. '{print $4"."$3"."$2"."$1}' <<<"$ip")
-  echo "ptr-record=${rev}.in-addr.arpa,$host" >> "$ZONEFILE"
+  # rev=$(awk -F. '{print $4"."$3"."$2"."$1}' <<<"$ip")
+  # echo "ptr-record=${rev}.in-addr.arpa,$host" >> "$ZONEFILE"
 }
 
 get_image_for_service() {
@@ -686,12 +686,9 @@ create_zonefile() {
   cat >"$zonefile" <<EOF
 # dnsmasq extra hosts for session $SESSION_ID
 # Forward entries
-address=/host.nfr.lab/$host_ip
-address=/console.nfr.lab/$console_ip
+$host_ip    host.nfr.lab
+$console_ip console.nfr.lab
 
-# Reverse PTR entries
-ptr-record=${host_rev}.in-addr.arpa,host.nfr.lab
-ptr-record=${console_rev}.in-addr.arpa,console.nfr.lab
 EOF
 
   log silent "✔ Wrote dnsmasq zone file: $zonefile"

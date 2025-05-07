@@ -22,7 +22,7 @@ launch_console(){
   thttpd -dd /opt/web -c "/cgi-bin/*" -D & 
   ncat --listen --ssl --ssl-cert $SSL_CERT_PATH --ssl-key $SSL_KEY_PATH --sh-exec "ncat 127.0.0.1 80" -k -p 443 &
   rsyslogd
-  dnsmasq -k
+  dnsmasq -q --log-debug -8 /opt/target/dnsmasq.log -k
 }
 
 launch_ssh() {
