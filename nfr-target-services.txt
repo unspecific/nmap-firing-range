@@ -28,32 +28,48 @@
   ───────	─────────────	──────────	─────────────────────
   api-em      	FakeAPI   	tcp:8080	HTTP REST API, fake flags
   api-em      	FakeAPI   	tcp:8443:tls	HTTP REST API, fake flags with TLS
-  crap-em     	Unspecific	tcp:9999	Custom API for propriatary client
-  crap-em     	Unspecific	tcp:9443:tls	Custom API for propriatary client with TLS
-  finger-em   	FakeFinger	tcp:79  	Simple Service sharing personal information.
+  crap-em     	Unspecific	tcp:9999	Custom API for proprietary client
+  crap-em     	Unspecific	tcp:9443:tls	Custom API for proprietary client with TLS
+  dns-em      	FakeDNS   	tcp:53  	Simple DNS emulator with TXT-flag record
+  dns-em      	FakeDNS   	udp:53  	Simple DNS emulator with TXT-flag record
+  finger-em   	FakeFinger	tcp:79  	Simple service sharing personal information.
   ftp-em      	FakeFTPd  	tcp:21  	FTPd emulator, brute force required
   ftp-em      	FakeFTPd  	tcp:990:tls	FTPd emulator, brute force required with TLS
-  http-em     	FakeHTTPd 	tcp:80  	HTTP/web server it's API?
-  http-em     	FakeHTTPd 	tcp:443:tls	HTTP/web server it's API? with TLS
+  http-em     	FakeHTTPd 	tcp:80  	HTTP/web server with login flow
+  http-em     	FakeHTTPd 	tcp:443:tls	HTTP/web server with login flow with TLS
   imap-em     	FakeIMAPd 	tcp:143 	IMAP4 emulator, brute force enabled
   imap-em     	FakeIMAPd 	tcp:993:tls	IMAP4 emulator, brute force enabled with TLS
-  irc-em      	FakeIRC   	TCP:6667	IRCd server
-  irc-em      	FakeIRC   	tcp:6697:tls	IRCd server with TLS
-  ldap-em     	FakeLDAP  	tcp:389 	LDAP w/Anonymous access
-  ldap-em     	FakeLDAP  	tcp:636:tls	LDAP w/Anonymous access with TLS
-  memcached-em	memfaked  	tcp:11211	Key-Value temp storage
-  nntp-em     	FakeNNTP  	tcp:119 	NNTP with brute force
-  nntp-em     	FakeNNTP  	tcp:563:tls	NNTP with brute force with TLS
-  pop3-em     	FakePOP3d 	tcp:110 	POP3 with brute force
-  pop3-em     	FakePOP3d 	tcp:995:tls	POP3 with brute force with TLS
-  redis-em    	FakeRedis 	tcp:6379	Redis with Flag in commands
-  redis-em    	FakeRedis 	tcp:6380:tls	Redis with Flag in commands with TLS
-  smtp-em     	FakeSMTP  	tcp:25  	SMTP Interface, Flag hidden in workflow
-  smtp-em     	FakeSMTP  	tcp:465:tls	SMTP Interface, Flag hidden in workflow with TLS
-  snmp-em     	FakeSNMP  	tcp:161 	Simple SNMP, guess the community
-  snmp-em     	FakeSNMP  	udp:161 	Simple SNMP, guess the community
-  socks4-em   	FakeSOCKS4	tcp:1080	Minimal SOCK4 Proxy
-  socks4-em   	FakeSOCKS4	tcp:1443	Minimal SOCK4 Proxy
-  telnet-em   	FakeTELNETd	tcp:23  	Telnet server, brute force enables
-  telnet-em   	FakeTELNETd	tcp:992:tls	Telnet server, brute force enables with TLS
+  irc-em      	FakeIRC   	tcp:6667	IRCd server with hidden paths to the flag
+  irc-em      	FakeIRC   	tcp:6697:tls	IRCd server with hidden paths to the flag with TLS
+  ldap-em     	FakeLDAP  	tcp:389 	LDAP w/ Anonymous & Simple Bind, filterable search
+  ldap-em     	FakeLDAP  	tcp:636:tls	LDAP w/ Anonymous & Simple Bind, filterable search with TLS
+  memcached-em	memfaked  	tcp:11211	Memcached emulator with full ASCII protocol
+  mysql-em    	FakeMySQLd	tcp:3306	MySQL emulator with simple SQL and flag table
+  nntp-em     	FakeNNTP  	tcp:119 	NNTP with brute force enabled
+  nntp-em     	FakeNNTP  	tcp:563:tls	NNTP with brute force enabled with TLS
+  ntp-em      	FakeNTPd  	udp:123 	NTP emulator with TIME & MONLIST
+  pop3-em     	FakePOP3d 	tcp:110 	POP3 with brute force enabled
+  pop3-em     	FakePOP3d 	tcp:995:tls	POP3 with brute force enabled with TLS
+  postgres-em 	FakePostgreSQL	tcp:5432	PostgreSQL emulator, simple SQL interface
+  postgres-em 	FakePostgreSQL	tcp:5433:tls	PostgreSQL emulator, simple SQL interface with TLS
+  rabbitmq-em 	FakeRabbitMQ	tcp:15672	RabbitMQ Management API emulator
+  rabbitmq-em 	FakeRabbitMQ	tcp:15671:tls	RabbitMQ Management API emulator with TLS
+  rdp-em      	FakeRDPd  	tcp:3389	Minimal RDP handshake + flag drop
+  rdp-em      	FakeRDPd  	tcp:1443:tls	Minimal RDP handshake + flag drop with TLS
+  redis-em    	FakeRedis 	tcp:6379	Redis emulator with flag in GET/KEYS
+  redis-em    	FakeRedis 	tcp:6380:tls	Redis emulator with flag in GET/KEYS with TLS
+  smb-em      	FakeSMBd  	tcp:445 	Text-mode SMB emulator (LIST/GET)
+  smb-em      	FakeSMBd  	tcp:1445:tls	Text-mode SMB emulator (LIST/GET) with TLS
+  smtp-em     	FakeSMTP  	tcp:25  	SMTP Interface, flag hidden in workflow
+  smtp-em     	FakeSMTP  	tcp:465:tls	SMTP Interface, flag hidden in workflow with TLS
+  snmp-em     	FakeSNMP  	tcp:161 	SNMPv2c emulator with GET/GETNEXT/WALK
+  snmp-em     	FakeSNMP  	udp:161 	SNMPv2c emulator with GET/GETNEXT/WALK
+  socks4-em   	FakeSOCKS4	tcp:1080	SOCKS4 proxy with hidden-flag CONNECT
+  socks4-em   	FakeSOCKS4	tcp:1443:tls	SOCKS4 proxy with hidden-flag CONNECT with TLS
+  ssh-em      	SSH       	tcp:22  	SSH banner + pseudo shell login
+  telnet-em   	FakeTELNETd	tcp:23  	Telnet server, brute force enabled
+  telnet-em   	FakeTELNETd	tcp:992:tls	Telnet server, brute force enabled with TLS
+  tftp-em     	FakeTFTPd 	udp:69  	TFTP emulator – get flag.txt
+  vnc-em      	FakeVNCd  	tcp:5900	Minimal RFB 3.8 handshake + flag via clipboard
+  vnc-em      	FakeVNCd  	tcp:5901:tls	Minimal RFB 3.8 handshake + flag via clipboard with TLS
 

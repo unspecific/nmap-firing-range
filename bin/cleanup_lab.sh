@@ -11,6 +11,7 @@ APP="NFR Cleanup"
 VERSION="2.2.9"
 LOG_DIR="logs"
 BIN_DIR="bin"
+SESSION_ID=""
 
 # ─── Auto-discover your project root ────────────────────────────────────────
 # Script lives in project_root/bin/cleanup_lab.sh
@@ -31,16 +32,24 @@ fi
 
 if [[ ! -f "$SUBMISSION_FILE" ]]; then
   echo " ❌  Score card not found: $SUBMISSION_FILE" >&2
-  echo "Run this from the project root (where score_card was generated)." >&2
-  exit 1
+  read -rp "$SUBMISSION_FILE missing. Enter the session ID if you know it: " local_sess
+  if [[ -d "$LAB_DIR/logs/lab_$local_sess" ]]; then
+    echo " Session directory found. Will attempt to cleanup"
+    SESSION_ID="$local_sess" 
+  else
+    echo "Unable to find session. Run this from the project root (where score_card was generated)." >&2
+    exit 1
+  fi
 fi
 
 # ─── Extract session ID from the score_card ─────────────────────────────────
-SESSION_ID=$(grep -m1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2-)
-if [[ -z "$SESSION_ID" ]]; then
-  echo " ❌  session= not found in $SUBMISSION_FILE" >&2
-  exit 1
-fi
+if [[ -z $SESSION_ID ]]; then
+  SESSION_ID=$(grep -m1 '^session=' "$SUBMISSION_FILE" | cut -d'=' -f2-)
+  if [[ -z "$SESSION_ID" ]]; then
+    echo " ❌  session= not found in $SUBMISSION_FILE" >&2
+    exit 1
+  fi
+fi 
 
 SESSION_DIR="$LAB_DIR/$LOG_DIR/lab_$SESSION_ID"
 SERVICES_MAP="$SESSION_DIR/services.map"

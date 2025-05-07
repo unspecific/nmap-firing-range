@@ -637,12 +637,12 @@ fi
 # 2) Check for staged local install files
 log console "Checking for local install files in $(pwd)..."
 if [[ "$INSTALL_MODE" == "local" ]] && check_local staged; then
-  log console "📁  Staged install files found."
+  log console " 📁  Staged install files found."
   if [[ "$UNATTENDED" == true ]]; then
     INSTALL_MODE="local"
-    log console "✅  Unattended mode: installing from local scripts."
+    log console " ✅  Unattended mode: installing from local scripts."
   else
-    read -rp "Install from local scripts? (y/n): " resp
+    read -rp " 📁  Install from local scripts? (y/n): " resp
     [[ "$resp" =~ ^[Yy]$ ]] && INSTALL_MODE="local"
   fi
 fi
@@ -659,8 +659,7 @@ if [[ -z "$INSTALL_MODE" ]]; then
     INSTALL_MODE="local"
     log console " 🌐  Unattended mode: defaulting to local install."
   elif check_local staged; then
-    log console " 🌐  "
-    read -rp "Install from local source? (y/n): " resp
+    read -rp " 📁  Install from local source? (y/n): " resp
     if [[ "$resp" =~ ^[Yy]$ ]]; then
       INSTALL_MODE="local"
     else

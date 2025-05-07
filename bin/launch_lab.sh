@@ -4,7 +4,7 @@ if [[ "$*" =~ (^| )-V($| ) || "$*" =~ (^| )-l($| ) || "$*" =~ (^| )-h($| ) ]]; t
 fi
 # If it's not root, sudo
 if [[ $EUID -ne 0 && "$SKIP_SUDO" != "true" ]]; then
-  echo " 🔒 Root access required. Re-running with sudo..."
+  echo " 🔒  Root access required. Re-running with sudo..."
   if [[ "$DEBUG" == "true" ]]; then
     echo "Relaunching in DEBUG mode..."
     exec sudo DEBUG=true "$0" "$@"
@@ -93,21 +93,19 @@ create_service_cert() {
   log console " 🔐  Generating TLS certificate"
   # ─── Normalize the base name ───────────────────────────────────────────────
   # strip any trailing ".nfr.lab"
-  local base_name="${name%${DOMAIN}}"
-  local fqdn="${base_name}${DOMAIN}"
-  local out_dir="$ca_dir/$base_name"
-  local key_file="$out_dir/$base_name.key"
-  local cnf_file="$out_dir/$base_name.cnf"
-  local csr_file="$out_dir/$base_name.csr"
-  local crt_file="$out_dir/$base_name.crt"
+  local out_dir="$ca_dir/$name"
+  local key_file="$out_dir/$name.key"
+  local cnf_file="$out_dir/$name.cnf"
+  local csr_file="$out_dir/$name.csr"
+  local crt_file="$out_dir/$name.crt"
 
   mkdir -p "$out_dir"
 
-  log silent " 🔐  Generating TLS cert for $fqdn (CA-signed)"
+  log silent " 🔐  Generating TLS cert for $name (CA-signed)"
 
   # 1) Private key (quiet)
   if ! openssl genrsa -out "$key_file" 2048 >/dev/null 2>&1; then
-    log console " ❌  Failed to generate key for $fqdn"
+    log console " ❌  Failed to generate key for $name"
     return 1
   fi
 
@@ -119,13 +117,13 @@ req_extensions     = v3_req
 prompt             = no
 
 [ req_distinguished_name ]
-CN = $fqdn
+CN = $name
 
 [ v3_req ]
 subjectAltName = @alt_names
 
 [ alt_names ]
-DNS.1 = $fqdn
+DNS.1 = $name
 IP.1  = $ip
 EOF
 
@@ -136,7 +134,7 @@ EOF
         -config "$cnf_file" \
         -batch -utf8 \
         >/dev/null 2>&1; then
-    log console " ❌  Failed to generate CSR for $fqdn"
+    log console " ❌  Failed to generate CSR for $name"
     return 1
   fi
 
@@ -148,11 +146,11 @@ EOF
         -days 365 -sha256 \
         -extfile "$cnf_file" -extensions v3_req \
         >/dev/null 2>&1; then
-    log console " ❌  Failed to sign certificate for $fqdn"
+    log console " ❌  Failed to sign certificate for $name"
     return 1
   fi
 
-  log silent " ✔  Certificate for $fqdn written to $crt_file"
+  log silent " ✔  Certificate for $name written to $crt_file"
 }
 
 # Check dependancies
@@ -189,7 +187,7 @@ check_dependencies() {
     if [[ "$UNATTENDED" != true ]]; then
       read -rp "Docker image '$image' not found locally. Load from archive '$tgz_file'? (y/n): " load_resp
       if [[ ! "$load_resp" =~ ^[Yy]$ ]]; then
-        log console "❌ User chose not to load '$image'."
+        log console " ❌  User chose not to load '$image'."
         missing=1
         return
       fi
@@ -253,7 +251,7 @@ generate_flag() {
   fi
 
   flag="FLAG{$rand}"
-  log console " 🔑 Generated flag"
+  log console " 🔑  Generated flag"
   log silent " Generated FLAG: $flag for $service"
   echo "$flag"
 }
@@ -538,7 +536,7 @@ load_emulated_services() {
           printf "  %-12s\t%-10s\t%-8s\t%s\n" "$key" "${daemon:-N/A}" "${proto}:${port_num}" "${desc:-No description provided}"
         fi
       done
-      [[ "$DEBUG" == "true" ]] && echo "⏩ ───────────────────────────────────────────────"
+      [[ "$DEBUG" == "true" ]] && echo " ⏩  ───────────────────────────────────────────────"
     done
 
     echo
@@ -1179,6 +1177,8 @@ EOF
   cat >> "$compose_file" <<EOF
     command: sh -c "/opt/target/launch_target.sh; /bin/bash"
     volumes:
+      - $SESSION_DIR/$CONF_DIR/certs/${svc_hostname}/${svc_hostname}.key:/etc/certs/${svc_hostname}/${svc_hostname}.key:ro
+      - $SESSION_DIR/$CONF_DIR/certs/${svc_hostname}/${svc_hostname}.crt:/etc/certs/${svc_hostname}/${svc_hostname}.crt:ro
       - $SESSION_DIR/target/conf/rsyslog/rsyslog.conf:/etc/rsyslog.conf:ro
       - $SESSION_DIR/$TARGET_DIR:/opt/target:rw
       - $SESSION_DIR/$TARGET_DIR/conf/resolv.conf:/etc/resolv.conf
@@ -1211,7 +1211,7 @@ EOF
 log silent "✔ Finished creating Compose file: $compose_file"
 
 if docker compose -f "$compose_file" config --quiet; then
-  log console " ✅  sDocker-Compose config valid, launching stack…"
+  log console " ✅  Docker-Compose config valid, launching stack…"
 else
   log console "❌ Docker-Compose config is invalid – aborting!"
   exit 1
