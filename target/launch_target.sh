@@ -67,6 +67,10 @@ launch_smtp() {
   smtpd -F
 }
 
+launch_imap() {
+  log "Launching IMAP"
+}
+
 launch_snmp() {
   log "Launching SNMP"
   rsyslogd
@@ -118,6 +122,8 @@ case "$SERVICE" in
   tftp)     launch_tftp ;;
   ftp)      launch_ftp ;;
   http)     launch_http ;;
+  imap)     launch_imap ;;
+  pop)      launch_pop ;;
   smtp)     launch_smtp ;;
   snmp)     launch_snmp ;;
   *-em)     launch_emulator ;;

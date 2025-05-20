@@ -770,8 +770,6 @@ shift $((OPTIND -1))
 echo
 log console " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
-# 1) Verify dependencies
-check_dependencies
 
 # 2) Prepare session folder (unless we’re just listing)
 SESSION_TIME=$(date +"%Y-%m-%d_%H-%M-%S")
@@ -829,6 +827,11 @@ fi
 
 # Load emulated services (will exit if -l/list-only)
 load_emulated_services
+
+# Load exists app if -l is used
+# Otherwise we move forward
+# Verify dependencies
+check_dependencies
 
 
 # ─── Create session directory structure ─────────────────────────────────────
@@ -1231,7 +1234,7 @@ log console " 🎉  Your Nmap Firing Range is ready for testing!\n\r"
 log console "    **** Targets have been launched. ****\r\n          **** The range is hot. ****"
 log console " Start your adventure with this command:"
 log console "     nmap -v $SUBNET.0/24"
-log console "  try adding --dns-servers $SUBNET.2 for nme resolution.
+log console "  try adding --dns-servers $SUBNET.2 for nme resolution."
 log console "         or visit http://console.nfr.lab/"
 echo
 
