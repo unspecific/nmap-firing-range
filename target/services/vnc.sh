@@ -19,11 +19,11 @@ hexdump_send() {
 echo -ne "RFB $EM_VERSION\n"
 
 # 2) Read client version (12 bytes)
-IFS= read -r -N12 client_ver || exit
+IFS= read -r -t 10 -N12 client_ver || exit 0
 
 # 3) Security handshake: we only support “None” (type 1)
-echo -ne "\x01\x01"    # [number of types=1][type=1]
-IFS= read -r -N1 _     # client picks type
+echo -ne “\x01\x01”    # [number of types=1][type=1]
+IFS= read -r -t 10 -N1 _ || exit 0    # client picks type
 
 # 4) SecurityResult OK
 echo -ne "\x00\x00\x00\x00"
@@ -51,7 +51,7 @@ printf "\\x%02x\\x%02x\\x%02x\\x%02x" \
 echo -n "$name"
 
 # 6) Read ClientInit (1 byte: sharedFlag)
-IFS= read -r -N1 _ || exit
+IFS= read -r -t 10 -N1 _ || exit 0
 
 # 7) Send a ServerCutText (clipboard) message with the flag
 #    MsgType=3, pad[3]=0, length[4], then text

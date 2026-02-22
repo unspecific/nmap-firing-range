@@ -17,7 +17,7 @@ NTP_OFFSET=2208988800
 # Startup banner (so TCP scanners see something on 123/tcp too)
 echo "$EM_DAEMON/$EM_VERSION starting on $HOST (UDP/tcp port 123)"
 
-while IFS= read -r line || [[ -n "$line" ]]; do
+while IFS= read -r -t 30 line; do
   cmd=${line%% *}; arg=${line#* }
 
   case "${cmd^^}" in

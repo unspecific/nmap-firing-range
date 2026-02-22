@@ -25,7 +25,7 @@ send_reply() {
 # Read the full handshake (VN, CD, DSTPORT, DSTIP, USERID\0, [DOMAIN\0])
 read_handshake() {
   # VN + CD + PORT(2) + IP(4)
-  read -r -n8 hdr
+  read -r -t 10 -n8 hdr || return 1
   vn=$(printf '%d' "'${hdr:0:1}")
   cd=$(printf '%d' "'${hdr:1:1}")
   dstport=$(( ( $(printf '%d' "'${hdr:2:1}") << 8 ) + $(printf '%d' "'${hdr:3:1}") ))
@@ -37,14 +37,14 @@ read_handshake() {
 
   # read null-terminated USERID
   user=""
-  while IFS= read -r -n1 ch && [[ "$ch" != $'\0' ]]; do
+  while IFS= read -r -t 10 -n1 ch && [[ "$ch" != $'\0' ]]; do
     user+="$ch"
   done
 
   # if SOCKS4A (IP starts with 0.0.0.x), read DOMAIN
   domain=""
   if [[ $dstip == 0.0.0.* ]]; then
-    while IFS= read -r -n1 ch && [[ "$ch" != $'\0' ]]; do
+    while IFS= read -r -t 10 -n1 ch && [[ "$ch" != $'\0' ]]; do
       domain+="$ch"
     done
   fi
@@ -76,7 +76,7 @@ while read_handshake; do
       send_reply $reply_cd
 
       # echo loop
-      while IFS= read -r data; do
+      while IFS= read -r -t 30 data; do
         printf "%b" "$data"
       done
       break

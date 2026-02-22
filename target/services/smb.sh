@@ -19,7 +19,7 @@ echo "$EM_DAEMON v$EM_VERSION ready"
 echo "Type HELP for commands"
 
 # Main loop: simple text commands
-while IFS= read -r line; do
+while IFS= read -r -t 30 line; do
     cmd=${line%% *}
     arg=${line#* }
 

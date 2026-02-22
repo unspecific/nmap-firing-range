@@ -24,17 +24,17 @@ CHANNEL_JOIN="0300000602f080"
 echo "$EM_DAEMON/$EM_VERSION ready"
 
 # 1) read client’s initial TPKT (we don’t really parse)
-read -r -n4 hdr
+read -r -t 10 -n4 hdr || exit 0
 
 # 2) reply with a valid TPKT/X.224 Connect-Confirm
 hex2bin "$CONNECT_CONFIRM"
 
 # 3) client will send its MCS Connect-Initial (we’ll just consume it)
 #    it’s variable length, but always starts with a TPKT header:
-read -r -n4 hdr2
+read -r -t 10 -n4 hdr2 || exit 0
 # consume the rest of the packet (length from bytes 3–4)
-len=$(( ( $(printf '%d' "'${hdr2:2:1}") << 8 ) + $(printf '%d' "'${hdr2:3:1}") - 4 ))
-read -r -n "$len" junk
+len=$(( ( $(printf ‘%d’ "’${hdr2:2:1}") << 8 ) + $(printf ‘%d’ "’${hdr2:3:1}") - 4 ))
+read -r -t 10 -n "$len" junk || exit 0
 
 # 4) send another stub to simulate channel join/setting up the session
 hex2bin "$CHANNEL_JOIN"

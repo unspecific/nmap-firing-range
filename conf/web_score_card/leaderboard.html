@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nmap Firing Range - Leaderboard</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      background: #101010;
+      color: #e0e0e0;
+      font-family: monospace;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      color: #00ff88;
+      margin: 0;
+      font-size: 1.6rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      color: #555;
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+      letter-spacing: 1px;
+    }
+
+    .live-badge {
+      display: inline-block;
+      background: #ff0044;
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 0.1rem 0.5rem;
+      border-radius: 3px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      animation: blink 1.2s step-start infinite;
+      vertical-align: middle;
+      margin-left: 0.8rem;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      font-weight: bold;
+      border: 1px solid #00ff88;
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      background: #000;
+      font-size: 0.85rem;
+    }
+
+    nav a:hover {
+      background: #00ff88;
+      color: #101010;
+    }
+
+    #last-updated {
+      text-align: center;
+      color: #444;
+      font-size: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .board {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .entry {
+      display: flex;
+      align-items: center;
+      padding: 0.8rem 1.2rem;
+      margin-bottom: 0.5rem;
+      background: #181818;
+      border: 1px solid #222;
+      border-radius: 6px;
+      transition: border-color 0.3s;
+    }
+
+    .entry:hover {
+      border-color: #333;
+    }
+
+    .rank {
+      font-size: 1.1rem;
+      font-weight: bold;
+      width: 2.5rem;
+      flex-shrink: 0;
+    }
+
+    .rank-1 { color: #ffd700; }
+    .rank-2 { color: #c0c0c0; }
+    .rank-3 { color: #cd7f32; }
+    .rank-other { color: #555; }
+
+    .callsign {
+      flex: 1;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      padding: 0 1rem;
+    }
+
+    .callsign.me {
+      color: #00ff88;
+    }
+
+    .details {
+      font-size: 0.8rem;
+      color: #555;
+      text-align: right;
+    }
+
+    .score {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #00ff88;
+      width: 6rem;
+      text-align: right;
+    }
+
+    .score.negative { color: #ff4444; }
+
+    .separator {
+      flex: 1;
+      border-top: 1px dotted #2a2a2a;
+      margin: 0 0.5rem;
+    }
+
+    #empty-msg {
+      text-align: center;
+      color: #444;
+      margin-top: 4rem;
+      font-size: 0.9rem;
+    }
+
+    .entry-1 { border-color: #3a3200; background: #1a1800; }
+    .entry-2 { border-color: #2a2a2a; background: #181818; }
+    .entry-3 { border-color: #2a1800; background: #191210; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>&#9654; Nmap Firing Range
+      <span class="live-badge">LIVE</span>
+    </h1>
+    <div class="subtitle">// FINGERPRINTING CTF &mdash; LEADERBOARD //</div>
+  </div>
+
+  <nav>
+    <a href="index.html">Dashboard</a>
+    <a href="scorecard.html">Scorecard</a>
+    <a href="logger.html">Syslog</a>
+    <a href="tcpdump.html">Tcpdump</a>
+  </nav>
+
+  <div id="last-updated">Refreshing...</div>
+
+  <div class="board" id="board">
+    <div id="empty-msg">No scores yet. Be the first to submit!</div>
+  </div>
+
+  <script>
+    function getCallsign() {
+      return (localStorage.getItem('callsign') || '').toUpperCase();
+    }
+
+    function rankClass(i) {
+      if (i === 0) return 'rank-1';
+      if (i === 1) return 'rank-2';
+      if (i === 2) return 'rank-3';
+      return 'rank-other';
+    }
+
+    function rankLabel(i) {
+      if (i === 0) return '#1';
+      if (i === 1) return '#2';
+      if (i === 2) return '#3';
+      return '#' + (i + 1);
+    }
+
+    function entryClass(i) {
+      if (i === 0) return 'entry entry-1';
+      if (i === 1) return 'entry entry-2';
+      if (i === 2) return 'entry entry-3';
+      return 'entry';
+    }
+
+    function render(data) {
+      const me = getCallsign();
+      const board = document.getElementById('board');
+      const empty = document.getElementById('empty-msg');
+
+      if (!data || data.length === 0) {
+        board.innerHTML = '<div id="empty-msg">No scores yet. Be the first to submit!</div>';
+        return;
+      }
+
+      board.innerHTML = '';
+      data.forEach((entry, i) => {
+        const isMe = me && entry.player.toUpperCase() === me;
+        const scoreClass = entry.score < 0 ? 'score negative' : 'score';
+
+        const div = document.createElement('div');
+        div.className = entryClass(i);
+        div.innerHTML = `
+          <span class="rank ${rankClass(i)}">${rankLabel(i)}</span>
+          <span class="callsign${isMe ? ' me' : ''}">${entry.player}${isMe ? ' &lt;YOU&gt;' : ''}</span>
+          <span class="details">${entry.submissions} submission${entry.submissions !== 1 ? 's' : ''}</span>
+          <span class="separator"></span>
+          <span class="${scoreClass}">${entry.score >= 0 ? '+' : ''}${entry.score} pts</span>
+        `;
+        board.appendChild(div);
+      });
+    }
+
+    function refresh() {
+      fetch('/cgi-bin/leaderboard.cgi')
+        .then(r => r.json())
+        .then(data => {
+          render(data);
+          const now = new Date().toLocaleTimeString();
+          document.getElementById('last-updated').textContent = 'Last updated: ' + now;
+        })
+        .catch(() => {
+          document.getElementById('last-updated').textContent = 'Update failed — retrying...';
+        });
+    }
+
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+
+</body>
+</html>

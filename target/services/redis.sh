@@ -32,13 +32,13 @@ send_array() {
 # Reads one request (inline or RESP), sets: CMD, ARGS[]
 parse_request() {
   ARGS=()
-  read -r line || return 1
+  read -r -t 30 line || return 1
   if [[ $line == \** ]]; then
     # RESP array
     local n=${line#\*}
     for _ in $(seq 1 $n); do
-      read -r size_line
-      read -r content
+      read -r -t 30 size_line || return 1
+      read -r -t 30 content || return 1
       ARGS+=( "$content" )
     done
   else

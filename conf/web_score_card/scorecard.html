@@ -4,8 +4,10 @@
   <meta charset="UTF-8" />
   <title>Nmap Firing Range - Scorecard</title>
   <style>
+    * { box-sizing: border-box; }
+
     body {
-      background-color: #101010;
+      background: #101010;
       color: #e0e0e0;
       font-family: monospace;
       margin: 0;
@@ -15,7 +17,114 @@
     h1 {
       text-align: center;
       color: #00ff88;
-      margin-bottom: 1rem;
+      margin-bottom: 0.3rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .callsign-bar {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+      color: #aaa;
+    }
+
+    .callsign-bar span {
+      color: #00ff88;
+      font-weight: bold;
+    }
+
+    .callsign-bar a {
+      color: #555;
+      cursor: pointer;
+      margin-left: 1rem;
+      font-size: 0.8rem;
+      text-decoration: underline;
+    }
+
+    /* Callsign setup overlay */
+    #callsign-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #callsign-overlay.visible {
+      display: flex;
+    }
+
+    .callsign-box {
+      background: #181818;
+      border: 1px solid #00ff88;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    .callsign-box h2 {
+      color: #00ff88;
+      margin-top: 0;
+      letter-spacing: 2px;
+    }
+
+    .callsign-box p {
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+
+    .callsign-box input {
+      background: #222;
+      border: 1px solid #444;
+      color: #00ff88;
+      padding: 0.6rem 1rem;
+      font-size: 1.1rem;
+      width: 100%;
+      border-radius: 4px;
+      margin: 0.5rem 0 1rem;
+      text-align: center;
+      letter-spacing: 2px;
+      font-family: monospace;
+    }
+
+    .callsign-box button {
+      background: #00ff88;
+      border: none;
+      color: #101010;
+      padding: 0.6rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      font-weight: bold;
+      border: 1px solid #00ff88;
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      background: #000;
+      font-size: 0.85rem;
+    }
+
+    nav a:hover {
+      background: #00ff88;
+      color: #101010;
     }
 
     form {
@@ -30,71 +139,115 @@
       border-radius: 6px;
     }
 
-    form input {
+    form input[type="text"],
+    form input[type="number"] {
       background: #222;
       border: 1px solid #444;
       color: #eee;
       padding: 0.4rem 0.6rem;
       font-size: 0.9rem;
-      width: 120px;
+      width: 130px;
       border-radius: 4px;
+      font-family: monospace;
     }
 
     form button {
       background-color: #00ff88;
       border: none;
       color: #101010;
-      padding: 0.4rem 0.8rem;
+      padding: 0.4rem 1.2rem;
       cursor: pointer;
       font-weight: bold;
       border-radius: 4px;
+      font-family: monospace;
+    }
+
+    form button:hover {
+      background-color: #00cc66;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 1rem;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
 
     th, td {
-      border: 1px solid #333;
-      padding: 0.5rem;
+      border: 1px solid #2a2a2a;
+      padding: 0.45rem 0.6rem;
       text-align: center;
     }
 
     th {
-      background-color: #181818;
+      background: #181818;
       color: #00ff88;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-size: 0.8rem;
     }
 
-    tr:nth-child(even) {
-      background-color: #1a1a1a;
-    }
+    tr:nth-child(even) { background: #141414; }
+    tr:nth-child(odd)  { background: #111; }
+
+    td.score-pos { color: #00ff88; font-weight: bold; }
+    td.score-neg { color: #ff4444; font-weight: bold; }
 
     #score-display {
       text-align: center;
-      margin-top: 1rem;
-      font-size: 1rem;
+      margin: 1rem 0;
+      font-size: 1.1rem;
       color: #00ff88;
+      letter-spacing: 1px;
+    }
+
+    #score-display .pts {
+      font-size: 1.5rem;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <h1>🎯 Nmap Firing Range Scorecard</h1>
+  <!-- Callsign setup overlay -->
+  <div id="callsign-overlay">
+    <div class="callsign-box">
+      <h2>[ IDENTIFY YOURSELF ]</h2>
+      <p>Enter your operator callsign.<br>This is stored locally and used to track your score.</p>
+      <input type="text" id="callsign-input" placeholder="YOUR_CALLSIGN" maxlength="24" autocomplete="off" />
+      <br>
+      <button onclick="saveCallsign()">REGISTER</button>
+    </div>
+  </div>
+
+  <h1>&#9654; Nmap Firing Range // Scorecard</h1>
+
+  <div class="callsign-bar">
+    Operator: <span id="callsign-display">---</span>
+    <a onclick="changeCallsign()">[change]</a>
+  </div>
+
+  <nav>
+    <a href="index.html">Dashboard</a>
+    <a href="leaderboard.html">Leaderboard</a>
+    <a href="logger.html">Syslog</a>
+    <a href="tcpdump.html">Tcpdump</a>
+  </nav>
 
   <form action="/cgi-bin/submit_score.cgi" method="POST">
-    <input type="text" name="hostname" placeholder="Hostname" required>
-    <input type="text" name="ip" placeholder="IP Address" required>
-    <input type="number" name="port" placeholder="Port" required>
-    <input type="text" name="protocol" placeholder="Protocol" required>
-    <input type="text" name="service" placeholder="Service" required>
-    <input type="text" name="flag" placeholder="Flag" required>
-    <button type="submit">Submit</button>
+    <input type="hidden" name="player" id="player-field" value="">
+    <input type="text"   name="hostname" placeholder="Hostname"  required>
+    <input type="text"   name="ip"       placeholder="IP Address" required>
+    <input type="number" name="port"     placeholder="Port"       required>
+    <input type="text"   name="protocol" placeholder="Protocol"   required>
+    <input type="text"   name="service"  placeholder="Service"    required>
+    <input type="text"   name="flag"     placeholder="Flag"       required>
+    <button type="submit">SUBMIT</button>
   </form>
 
-  <div id="score-display">Current Score: <span id="score-value">0</span></div>
+  <div id="score-display">
+    Score: <span class="pts" id="score-value">0</span> pts
+  </div>
 
   <table>
     <thead>
@@ -109,37 +262,80 @@
         <th>Score</th>
       </tr>
     </thead>
-    <tbody id="submitted-entries">
-      <!-- Entries will be injected here -->
-    </tbody>
+    <tbody id="submitted-entries"></tbody>
   </table>
 
   <script>
-    // Optional JS to load existing submissions from score.json
-    fetch('/etc/score.json')
-      .then(r => r.json())
-      .then(data => {
-        let totalScore = 0;
-        data.entries.reverse().forEach(entry => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${entry.host || '-'}</td>
-            <td>${entry.ip || '-'}</td>
-            <td>${entry.port || '-'}</td>
-            <td>${entry.protocol || '-'}</td>
-            <td>${entry.service || '-'}</td>
-            <td>${entry.flag || '-'}</td>
-            <td>${entry.timestamp}</td>
-            <td>${entry.score}</td>
-          `;
-          document.getElementById('submitted-entries').appendChild(row);
-          totalScore += entry.score;
-        });
-        document.getElementById('score-value').textContent = totalScore;
-      })
-      .catch(() => {
-        // Fallback or error display
-      });
+    function getCallsign() {
+      return localStorage.getItem('callsign') || '';
+    }
+
+    function saveCallsign() {
+      const val = document.getElementById('callsign-input').value.trim().toUpperCase();
+      if (!val) return;
+      localStorage.setItem('callsign', val);
+      document.getElementById('callsign-overlay').classList.remove('visible');
+      init();
+    }
+
+    function changeCallsign() {
+      document.getElementById('callsign-input').value = getCallsign();
+      document.getElementById('callsign-overlay').classList.add('visible');
+    }
+
+    document.getElementById('callsign-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') saveCallsign();
+    });
+
+    function init() {
+      const callsign = getCallsign();
+      if (!callsign) {
+        document.getElementById('callsign-overlay').classList.add('visible');
+        return;
+      }
+
+      document.getElementById('callsign-display').textContent = callsign;
+      document.getElementById('player-field').value = callsign;
+
+      loadScores(callsign);
+    }
+
+    function loadScores(callsign) {
+      fetch('/etc/score.json')
+        .then(r => r.json())
+        .then(data => {
+          const myEntries = (data.entries || [])
+            .filter(e => (e.player || 'anonymous').toUpperCase() === callsign.toUpperCase())
+            .reverse();
+
+          let total = 0;
+          const tbody = document.getElementById('submitted-entries');
+          tbody.innerHTML = '';
+
+          myEntries.forEach(entry => {
+            const row = document.createElement('tr');
+            const scoreClass = entry.score >= 0 ? 'score-pos' : 'score-neg';
+            row.innerHTML = `
+              <td>${entry.host     || '-'}</td>
+              <td>${entry.ip       || '-'}</td>
+              <td>${entry.port     || '-'}</td>
+              <td>${entry.protocol || '-'}</td>
+              <td>${entry.service  || '-'}</td>
+              <td>${entry.flag     || '-'}</td>
+              <td>${entry.timestamp}</td>
+              <td class="${scoreClass}">${entry.score >= 0 ? '+' : ''}${entry.score}</td>
+            `;
+            tbody.appendChild(row);
+            total += entry.score;
+          });
+
+          document.getElementById('score-value').textContent = total >= 0 ? '+' + total : total;
+          document.getElementById('score-value').style.color = total >= 0 ? '#00ff88' : '#ff4444';
+        })
+        .catch(() => {});
+    }
+
+    init();
   </script>
 
 </body>

@@ -18,13 +18,13 @@ COOKIE_NAME="session"
 
 # Read one request (line + headers + optional body)
 read_request() {
-  read -r request_line || return 1
+  read -r -t 30 request_line || return 1
   request_line="${request_line%%$'\r'}"
   method=${request_line%% *}
   path=${request_line#* }; path=${path%% *}
 
   headers=(); content_length=0; authorization=""; cookie=""
-  while IFS= read -r line && [[ -n "$line" ]]; do
+  while IFS= read -r -t 30 line && [[ -n "$line" ]]; do
     headers+=( "$line" )
     [[ $line =~ ^Content-Length:\ ([0-9]+) ]] && content_length=${BASH_REMATCH[1]}
     [[ $line =~ ^Cookie:\ (.*) ]]      && cookie=${BASH_REMATCH[1]}
@@ -32,7 +32,7 @@ read_request() {
 
   body=""
   if [[ $method == "POST" && $content_length -gt 0 ]]; then
-    read -rn $content_length body
+    read -r -t 30 -n $content_length body || return 1
     body="${body%%$'\r'}"
   fi
 }

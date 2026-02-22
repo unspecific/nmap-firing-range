@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 if [[ "$*" =~ (^| )-V($| ) || "$*" =~ (^| )-l($| ) || "$*" =~ (^| )-h($| ) ]]; then
   SKIP_SUDO=true
 fi
@@ -924,7 +924,7 @@ session=$SESSION_ID
 # hostname=<service_name> service=<service> target=<target_ip> port=<port> proto=<protocol> flag=<flag>
 EOF
 
-log console " 📊  Score Card Updated $SESSION_DIR/$SCORECARD"
+log console " 📊  Score Card Updated $SESSION_DIR/$SCORE_CARD"
 
 # ─── TLS Setup ───────────────────────────────────────────────────────────────
 if [[ "$skip_tls" != true ]]; then

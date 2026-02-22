@@ -40,7 +40,7 @@ launch_smb() {
   echo "$FLAG" > /opt/share/flag.txt
   adduser -D "$USERNAME"
   echo -e "$PASSWORD\n$PASSWORD" | smbpasswd -a -s "$USERNAME"
-  smbd -l "/var/log/services/" --configfile "/opt/tatget/conf/smb/smb.conf" -F
+  smbd -l "/var/log/services/" --configfile "/opt/target/conf/smb/smb.conf" -F
 }
 
 launch_tftp() {
@@ -80,17 +80,17 @@ launch_snmp() {
     logger "Missing Config SNMP $SNMP_CONF"
     exit 1
   fi
-  if sed -i "s/%COMMUNITY%/${COMMUNITY}/g" "$SNMP_CONF"; then
+  if ! sed -i "s/%COMMUNITY%/${COMMUNITY}/g" "$SNMP_CONF"; then
     logger "unable to update community"
   fi
-  if sed -i "s/:0.0.0.0:/:${IP_ADDRESS}:/g" "$SNMP_CONF"; then
+  if ! sed -i "s/:0.0.0.0:/:${IP_ADDRESS}:/g" "$SNMP_CONF"; then
     logger "unable to update Bind IP"
   fi
-  if sed -i "s/%SESSION_ID%/${SESSION_ID}/g" "$SNMP_CONF"; then
-    logger "unable to update community"
+  if ! sed -i "s/%SESSION_ID%/${SESSION_ID}/g" "$SNMP_CONF"; then
+    logger "unable to update SESSION_ID"
   fi
-  if sed -i "s/%PORT%/${PORTS}/g" "$SNMP_CONF"; then
-    logger "unable to update community"
+  if ! sed -i "s/%PORT%/${PORTS}/g" "$SNMP_CONF"; then
+    logger "unable to update PORT"
   fi
   snmpd -f -Lsd -c "$SNMP_CONF"
 }

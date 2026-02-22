@@ -26,13 +26,13 @@ send_response() {
 }
 
 # Read the request line
-IFS= read -r request_line || exit 0
+IFS= read -r -t 30 request_line || exit 0
 method=$(awk '{print $1}' <<<"$request_line")
 uri=$(awk '{print $2}' <<<"$request_line")
 
 # Read and parse headers
 declare -A headers
-while IFS= read -r header && [[ -n "$header" ]]; do
+while IFS= read -r -t 30 header && [[ -n "$header" ]]; do
   key=${header%%:*}
   val=${header#*: }
   headers["$key"]="$val"

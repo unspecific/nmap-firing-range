@@ -35,11 +35,11 @@ sleep 1
 
 # Prompt for username
 printf "login as: "
-read -r attempt_user
+read -r -t 30 attempt_user || exit 0
 
 # Prompt for password (silent input)
 printf "password: "
-read -rs attempt_pass
+read -r -t 30 -s attempt_pass || exit 0
 printf "\n"
 
 # Check against environment USERNAME and PASSWORD

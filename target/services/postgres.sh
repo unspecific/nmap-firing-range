@@ -20,7 +20,7 @@ echo "Welcome to $EM_DAEMON v$EM_VERSION on ${HOSTNAME:-localhost}"
 echo "Please authenticate: AUTH <user> <pass>"
 # Authentication loop
 auth_loop() {
-  while read -r line; do
+  while read -r -t 30 line; do
     if [[ "$line" =~ ^AUTH[[:space:]]+([^[:space:]]+)[[:space:]]+(.+) ]]; then
       user="${BASH_REMATCH[1]}"
       pass="${BASH_REMATCH[2]}"
@@ -41,7 +41,7 @@ auth_loop
 [[ "$AUTHENTICATED" != true ]] && exit 1
 
 # SQL command loop
-while read -r sql; do
+while read -r -t 30 sql; do
   # Normalize spacing and case
   stmt="$(echo "$sql" | sed 's/[[:space:]]\+/ /g')"
   upper="$(echo "$stmt" | tr '[:lower:]' '[:upper:]')"

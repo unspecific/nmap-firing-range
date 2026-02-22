@@ -56,7 +56,7 @@ handle_get() {
 handle_set() {
   local key=$1 flags=$2 exptime=$3 bytes=$4
   # Read the next line of data
-  IFS= read -r data
+  IFS= read -r -t 30 data || return 1
   STORE[$key]="$data"
   FLAGS[$key]="$flags"
   (( TOTAL_ITEMS++ ))
@@ -115,7 +115,7 @@ handle_flush_all() {
 
 # Main loop
 handle_version
-while IFS= read -r line; do
+while IFS= read -r -t 30 line; do
   # Split into tokens
   read -ra toks <<< "$line"
   cmd=${toks[0],,}

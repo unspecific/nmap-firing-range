@@ -9,7 +9,7 @@ EM_DAEMON="FakeFinger"
 EM_DESC="Simple service sharing personal information."  # Short description
 
 # Read the username being requested (only one line for finger)
-read username
+read -r -t 10 username || exit 0
 
 # Optional logging
 echo "[*] FINGER query received for: '$username'"

@@ -17,7 +17,7 @@ FLAG_SUBDOMAIN="flag.${DOMAIN}"
 echo "$EM_DAEMON/$EM_VERSION on $HOST ready for DNS queries in $DOMAIN"
 
 # Read queries as "<name> <type>"
-while IFS= read -r line; do
+while IFS= read -r -t 30 line; do
     # log for scoring
     echo "[*] DNS query: $line"
 

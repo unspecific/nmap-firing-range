@@ -39,10 +39,14 @@ handle_get() {
 }
 
 handle_getnext() {
-  local oid=$1 idx next
+  local oid=$1 idx="" next
   for i in "${!oids_sorted[@]}"; do
     [[ "${oids_sorted[i]}" == "$oid" ]] && idx=$i && break
   done
+  if [[ -z "$idx" ]]; then
+    echo "SNMP Error: noSuchName"
+    return
+  fi
   next=$(( idx + 1 ))
   if (( next < ${#oids_sorted[@]} )); then
     print_oid "${oids_sorted[next]}"
@@ -64,14 +68,14 @@ handle_walk() {
 echo "SNMP emulator $EM_DAEMON/$EM_VERSION starting (expect community: '$COMM_EXPECT')"
 
 # First line MUST be the community string
-read -r line || exit
+read -r -t 10 line || exit 0
 if [[ "${line##* }" != "$COMM_EXPECT" ]]; then
   echo "SNMP Error: Invalid community string"
   exit 1
 fi
 
 # Now process commands
-while read -r line; do
+while read -r -t 30 line; do
   # each line: COMMAND OID
   cmd=${line%% *}
   arg=${line#* }

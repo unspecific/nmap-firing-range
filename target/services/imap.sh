@@ -36,7 +36,7 @@ auth_loop() {
   local tag user pass
 
   while (( attempts < MAX_ATTEMPTS )); do
-    IFS= read -r line
+    IFS= read -r -t 30 line || exit 0
     tag=${line%% *}
     # Expect: A001 LOGIN <user> <pass>
     if [[ "${line^^}" =~ ^[A-Z0-9]+[[:space:]]+LOGIN[[:space:]]+([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
@@ -51,7 +51,7 @@ auth_loop() {
       echo -e "$tag OK LOGIN completed\r"
       return 0
     else
-      (( attempts++ ))
+      (( attempts++ )) || :
       echo -e "$tag NO LOGIN failed (${attempts}/${MAX_ATTEMPTS})\r"
     fi
   done
@@ -66,7 +66,7 @@ imap_loop() {
   local mailbox="INBOX"
   local exists=1
 
-  while IFS= read -r line; do
+  while IFS= read -r -t 30 line; do
     tag=${line%% *}
     cmd=${line#* }; cmd=${cmd%% *}
     args=${line#* }; args=${args#* }; args=${args#*}

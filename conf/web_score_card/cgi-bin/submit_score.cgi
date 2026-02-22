@@ -25,6 +25,7 @@ port="${params[port]}"
 protocol="${params[protocol]}"
 service="${params[service]}"
 flag="${params[flag]}"
+player="${params[player]:-anonymous}"
 timestamp=$(date -Iseconds)
 
 score=0
@@ -58,11 +59,11 @@ if command -v jq &>/dev/null; then
   tmp=$(mktemp)
   jq --arg hn "$hostname" --arg ip "$ip" --arg port "$port" \
      --arg proto "$protocol" --arg service "$service" --arg flag "$flag" \
-     --arg ts "$timestamp" --argjson sc "$score" \
-     '.entries += [{"host": $hn, "ip": $ip, "port": $port, "protocol": $proto, "service": $service, "flag": $flag, "timestamp": $ts, "score": $sc}]' \
+     --arg ts "$timestamp" --argjson sc "$score" --arg player "$player" \
+     '.entries += [{"player": $player, "host": $hn, "ip": $ip, "port": $port, "protocol": $proto, "service": $service, "flag": $flag, "timestamp": $ts, "score": $sc}]' \
      "$score_json" > "$tmp" && mv "$tmp" "$score_json"
 else
-  echo "{\"host\":\"$hostname\",\"ip\":\"$ip\",\"port\":\"$port\",\"protocol\":\"$protocol\",\"service\":\"$service\",\"flag\":\"$flag\",\"timestamp\":\"$timestamp\",\"score\":$score}" >> "$score_json"
+  echo "{\"player\":\"$player\",\"host\":\"$hostname\",\"ip\":\"$ip\",\"port\":\"$port\",\"protocol\":\"$protocol\",\"service\":\"$service\",\"flag\":\"$flag\",\"timestamp\":\"$timestamp\",\"score\":$score}" >> "$score_json"
 fi
 
 # Respond with redirect to scorecard page

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 APP="NFR-CheckLab"
 VERSION="2.2.9"
@@ -116,7 +117,7 @@ score=0; correct=0; wrong=0; target_count=0
 while IFS= read -r line; do
     [[ -z "$line" || "$line" =~ ^# ]] && continue
     [[ "$line" == session=* ]] && continue
-    ((target_count++))
+    (( target_count++ )) || :
     hostname=$(grep -oP 'hostname=\K\S+' <<< "$line")
     service=$(grep -oP 'service=\K\S+' <<< "$line")
     ip=$(grep -oP 'target=\K\S+' <<< "$line")
@@ -127,9 +128,9 @@ while IFS= read -r line; do
     key="${hostname}_${service}_${ip}_${port}_${proto}"
     correct_flag="${truth_map[$key]}"
     if [[ "$flag" == "$correct_flag" ]]; then
-        ((correct++)); ((score++))
+        (( correct++ )) || :; (( score++ )) || :
     else
-        ((wrong++)); ((score--))
+        (( wrong++ )) || :; (( score-- )) || :
     fi
 done < "$SUBMISSION_FILE"
 
@@ -164,7 +165,7 @@ for k in "${!truth_map[@]}"; do
     lookup_key="${hostname}_${ip}_${port}_${proto}"
     if [[ -z "${submitted_services[$lookup_key]}" ]]; then
         echo "- ❗ $hostname ($ip:$port:$proto) was not reported"
-        missed_any=1
+        (( missed_any++ )) || :
     fi
 done
 

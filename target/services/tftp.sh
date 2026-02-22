@@ -19,7 +19,7 @@ echo "$EM_DAEMON/$EM_VERSION ready for TFTP RRQ"
 # State
 expecting_ack=0
 
-while IFS= read -r line || [[ -n "$line" ]]; do
+while IFS= read -r -t 30 line; do
   # parse command + args
   cmd=$(echo "$line"  | awk '{print toupper($1)}')
   args="${line#* }"

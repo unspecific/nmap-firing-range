@@ -32,19 +32,19 @@ auth_loop() {
     local max=5 attempts=0 user="${USERNAME:-}" pass="${PASSWORD:-}"
 
     while (( attempts < max )); do
-        read -rp "AUTHINFO USER: " inp
+        read -r -t 30 -p "AUTHINFO USER: " inp || exit 0
         [[ "${inp,,}" =~ ^user[[:space:]]+(.+) ]] || { echo -e "501 Syntax error\r"; continue; }
         attempt_user=${BASH_REMATCH[1]}
 
         echo -n "AUTHINFO PASS: "
-        read -rs attempt_pass
+        read -r -t 30 -s attempt_pass || exit 0
         printf "\r\n"
 
         if [[ $attempt_user == "$user" && $attempt_pass == "$pass" ]]; then
             echo -e "281 Authentication accepted\r"
             return 0
         else
-            (( attempts++ ))
+            (( attempts++ )) || :
             echo -e "481 Authentication failed (${attempts}/${max})\r"
         fi
     done
@@ -60,7 +60,7 @@ nntp_loop() {
     local cmd arg
 
     echo -e "Type HELP for available commands\r"
-    while IFS= read -r line; do
+    while IFS= read -r -t 30 line; do
         cmd=${line%% *}
         arg=${line#* }
         case "${cmd^^}" in

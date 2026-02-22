@@ -30,7 +30,7 @@ auth_loop() {
   local attempts=0
   while (( attempts < MAX_ATTEMPTS )); do
     # expect: USER <name>
-    IFS= read -r line
+    IFS= read -r -t 30 line || exit 0
     if [[ "${line^^}" =~ ^USER[[:space:]]+(.+) ]]; then
       local try_user=${BASH_REMATCH[1]}
       echo -e "+OK User accepted\r"
@@ -40,7 +40,7 @@ auth_loop() {
     fi
 
     # expect: PASS <pass>
-    IFS= read -r line
+    IFS= read -r -t 30 line || exit 0
     if [[ "${line^^}" =~ ^PASS[[:space:]]+(.+) ]]; then
       local try_pass=${BASH_REMATCH[1]}
     else
@@ -52,7 +52,7 @@ auth_loop() {
       echo -e "+OK Authenticated\r"
       return 0
     else
-      (( attempts++ ))
+      (( attempts++ )) || :
       echo -e "-ERR Authentication failed (${attempts}/${MAX_ATTEMPTS})\r"
     fi
   done
@@ -68,7 +68,7 @@ pop3_loop() {
   local cmd arg
 
   echo -e "+OK Enjoy your mail\r"
-  while IFS= read -r line; do
+  while IFS= read -r -t 30 line; do
     cmd=${line%% *}
     arg=${line#* }
     case "${cmd^^}" in

@@ -16,20 +16,20 @@ What started as a simple idea has evolved into a flexible, containerized lab env
   Each lab session creates a /24 network in 192.168.0.0/16, and each host has a random IP, ensuring that scans mimic real-world unpredictability. This helps participants move beyond relying on standard ports and easily recognizable service signatures.
 
 - **Service Emulation:**  
-  A wide range of classic network services are emulated.  Look [here](nfr-target-services.txt) for the current lst.
+  A wide range of classic network services are emulated.  Look [here](nfr-target-services.txt) for the current list.
 
   These emulated services will fingerprint as the service for nmap, can support brute forcing, and other protocol specific tricks. 
 
 - **TLS/SSL Support:**  
-  Many services can optionally be configured to support SSL/TLS, requiring scanners to properly detect and negotiate secure sessions.  Each session,LS support is disabled, generates a new CA for the lab session.  Each host has a unique hostname, and a server certificate signed by the CA.
+  Many services can optionally be configured to support SSL/TLS, requiring scanners to properly detect and negotiate secure sessions.  Each session, unless SSL support is disabled, generates a new CA for the lab session.  Each host has a unique hostname, and a server certificate signed by the CA.
 
 - **Dynamic Credential Generation:**  
-  Each service can receive randomly generated usernames and passwords at launch, preventing users from relying on default credentials and promoting proper enumeration techniques.  This includes snmp communities and other authenitcation methds to allow for brute forcing.
+  Each service can receive randomly generated usernames and passwords at launch, preventing users from relying on default credentials and promoting proper enumeration techniques.  This includes snmp communities and other authentication methods to allow for brute forcing.
 
 - **Custom Service Banners: TBD**  
   Banners are randomized at container start to simulate different application versions, operating systems, and server responses, making fingerprinting and enumeration exercises more challenging and authentic.
 
-- **Logging for Scoring and Review:  PARTIAL**  
+- **Logging for Scoring and Review**
   Services include logging capabilities to capture user interaction. This enables scoring, post-scan analysis, and training feedback without affecting the live lab environment.
 
 - **DNS and Reverse DNS (PTR)**  
@@ -38,8 +38,13 @@ What started as a simple idea has evolved into a flexible, containerized lab env
 - **Syslog Server Integration:**  
   All container logs are sent to a centralized syslog server, which also acts as the environment’s DNS server. Logs persist across container restarts for full session visibility.
 
-- **Dashboard, Log analysis Support:  TBD**  
-  The environment is extensible to incorporate log visualization and searching during live sessions, enabling students to correlate scans, review activity, and understand service interactions at a deeper level.
+- **CTF Web Dashboard**
+  A browser-based dashboard is served from the console container at `http://console.nfr.lab/`. It provides real-time visibility into the session and supports multi-player CTF competitions:
+  - **Scorecard** — submit findings (hostname, IP, port, protocol, service, flag) and track your personal score
+  - **Leaderboard** — live ranked leaderboard showing all players; auto-refreshes every 5 seconds
+  - **Syslog viewer** — real-time streaming log output from all containers with client-side filtering
+  - **TCPDump viewer** — live network packet table with per-column filtering
+  - **Operator callsign** — each player registers a callsign (stored in browser localStorage) to identify their submissions across a shared session
 
 
 ### Project Goals
@@ -49,11 +54,11 @@ What started as a simple idea has evolved into a flexible, containerized lab env
 - Teach participants to adjust scanning techniques dynamically when encountering randomized environments.
 - Allow easy extension to new services, protocols, and security scenarios for advanced training.
 
-- Make it a game.  Lab challanges can be created and shared.
+- Make it a game. Multiple players can compete simultaneously via the live leaderboard — run it as a fingerprinting CTF for a class or team.
 - The program is extensible.  The emulated service can be dropped into a folder to add more service options.
 
 
-I have included a [list of available servises](./nfr-target-services.txt) to show what services are supported.  As of now not ll work 100% of the time.  That is the next task.
+I have included a [list of available services](./nfr-target-services.txt) to show what services are supported.  As of now not all work 100% of the time.  That is the next task.
 
 I have also included a [sample scan](./sample_scan.txt)
 
@@ -61,23 +66,23 @@ I have also included a [sample scan](./sample_scan.txt)
 
 # Installation
 
-If you hve internet access on the host you want to instll the firing range on,
+If you have internet access on the host you want to install the firing range on,
 - download the [setup_lab.sh](https://raw.githubusercontent.com/unspecific/nmap-firing-range/refs/heads/main/bin/setup_lab.sh) file.
 - chmod 755 setup_lab.sh
 - ./setup_lab.sh
 
-This will allow you to install directly from GitHib.
+This will allow you to install directly from GitHub.
 
-You can also download the package to install on an ofline host.  
+You can also download the package to install on an offline host.
 - download the [NFR Zip](https://github.com/unspecific/nmap-firing-range/archive/refs/heads/main.zip)
-- unzip the file.  It wll create a folder called nmap-firing-range
+- unzip the file.  It will create a folder called nmap-firing-range
 - cd nmap-firing-range/bin
 - chmod 755 setup_lab.sh
 - ./setup_lab.sh
 
 During the install it will see the local files and give an option to download or use the local files. 
 
-Once instaled, you can use setup_lab to unsinatll or update the system
+Once installed, you can use setup_lab to uninstall or update the system
 
 ```
 $ ./setup_lab.sh --help
@@ -104,20 +109,20 @@ of the scripts from GitHub.
 
 Once installed the apps can be called directly as they are added to your path.
 
-- launch_lab - For setup and launcing a new lab session
+- launch_lab - For setup and launching a new lab session
 - check_lab - For scoring your findings.  Moving to a web interface on the console server
-- cleanup_lab - Removed all te containers, networks, configuration entries used for the lab session
+- cleanup_lab - Removes all the containers, networks, configuration entries used for the lab session
 
 ---
 
-lanch_lab is the real workhose of the project and most of wat is listed above is covered here.
-It does add a group and adds the curent user for easier acces to the lab files.
+launch_lab is the real workhorse of the project and most of what is listed above is covered here.
+It does add a group and adds the current user for easier access to the lab files.
 
 launch_lab does relaunch with sudo when setting up a lab, but not a few options, like help and list services.
 
-During the first run it will check tomake sure you have docker and the required image installed.  It is ***unspecific/victim-v1-tiny***
+During the first run it will check to make sure you have docker and the required image installed.  It is ***unspecific/victim-v1-tiny***
 
-It included with theinsta package and is 22M compressed and ~78M in action.  If you want to build your own container locally, it is based on Alpine Linux, and in the <conf/> directory is a make file to buildit yourself.  We will cover that below.
+It is included with the install package and is 22M compressed and ~78M in action.  If you want to build your own container locally, it is based on Alpine Linux, and in the <conf/> directory is a make file to build it yourself.  We will cover that below.
 
 
 ```
@@ -144,9 +149,19 @@ Options:
 
 ---
 
-check_lab has minimal optnions.  By defualt it looks for the score_card in the PWD, and uses that to score against.  You can also specify the specific score_card you want to use.
+check_lab has minimal options.  By default it looks for the score_card in the PWD, and uses that to score against.  You can also specify the specific score_card you want to use.
 
-I have started creating a web interface for scoring. Once launched you can point a pbrowser to http://console.nfr.lab/ assuming you are running it locally, as it add an entray to /etc/hosts to allow access by name.  This entry is removed when the cleanup_lab is run.
+Once launched, point a browser to `http://console.nfr.lab/` (a `/etc/hosts` entry is added automatically and removed by `cleanup_lab`). The web interface supports multi-player CTF competitions — give participants VPN or SSH access to the lab network and have them compete via the leaderboard.
+
+**Web pages:**
+
+| Page | URL | Description |
+|---|---|---|
+| Dashboard | `/` | Session info, running containers, live mini-leaderboard |
+| Scorecard | `/scorecard.html` | Submit findings; shows your personal score history |
+| Leaderboard | `/leaderboard.html` | Live ranked leaderboard for all players |
+| Syslog | `/logger.html` | Real-time container log stream |
+| TCPDump | `/tcpdump.html` | Live network packet capture viewer |
 
 ```
 $ check_lab -h
@@ -160,7 +175,7 @@ Options:
 ---
 
 The last script in the project is ***cleanup_lab***
-It removes all evidense of thelab session except for the lab directory (***/opt/firing-rang/*** is the defalt)
+It removes all evidence of the lab session except for the lab directory (***/opt/firing-range/*** is the default)
 
 ```
 cleanup_lab
@@ -172,9 +187,9 @@ It is similar to check_lab where it looks for ***./score_card*** to used the ses
 
 ---
 
-As menioned in the <conf/> directory (Default instal locaiton is ***/opt/firing-range/conf/***) there is a Makefile.  This is used ot build and manae the Docker imaes used.  The only one used today is ***victim-v1-tiny***
+As mentioned in the <conf/> directory (Default install location is ***/opt/firing-range/conf/***) there is a Makefile.  This is used to build and manage the Docker images used.  The only one used today is ***victim-v1-tiny***
 
-As of this time te iages are not added to docker hub.
+As of this time the images are not added to docker hub.
 
 ```
 $ make help
@@ -214,17 +229,17 @@ Meta:
 
 ```
 
-to reitterate, ***make push*** is not set up at this time.
+To reiterate, ***make push*** is not set up at this time.
 
 ---
 
-All of the data used for a lab session is stored in ***INSTAL_DIR/logs/lab_sesion_id***
+All of the data used for a lab session is stored in ***INSTALL_DIR/logs/lab_session_id***
 
 If you go looking, you will find all the answers, but that would be cheating.
 
 Each session is self contained and you can rerun any previous lab session with ***launch_lab -i SESSION_ID***
 
-Here is what the average Lab Session contains.  Sesions can have some differences on the number of targets launched, te services used, and so forth.
+Here is what the average Lab Session contains.  Sessions can have some differences on the number of targets launched, the services used, and so forth.
 
 ```
 /opt/firing-range/logs/lab_85e2d331$ tree

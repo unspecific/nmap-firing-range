@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Nmap Firing Range Dashboard</title>
+  <title>Nmap Firing Range // CTF Dashboard</title>
   <style>
+    * { box-sizing: border-box; }
+
     body {
       background: #101010;
       color: #00ff88;
@@ -12,17 +14,108 @@
       padding: 1rem;
     }
 
-    h1 {
+    /* ── Header ── */
+    .site-header {
       text-align: center;
-      margin-bottom: 1rem;
-      color: #00ffaa;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #1a1a1a;
     }
 
+    .site-header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #00ffaa;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .site-header .tagline {
+      color: #2a6a4a;
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      margin-top: 0.3rem;
+    }
+
+    .callsign-bar {
+      color: #555;
+      font-size: 0.85rem;
+      margin-top: 0.4rem;
+    }
+
+    .callsign-bar span { color: #00ff88; }
+
+    .callsign-bar a {
+      color: #444;
+      cursor: pointer;
+      margin-left: 0.8rem;
+      font-size: 0.75rem;
+      text-decoration: underline;
+    }
+
+    /* ── Callsign overlay ── */
+    #callsign-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.88);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #callsign-overlay.visible { display: flex; }
+
+    .callsign-box {
+      background: #181818;
+      border: 1px solid #00ff88;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    .callsign-box h2 {
+      color: #00ff88;
+      margin-top: 0;
+      letter-spacing: 2px;
+    }
+
+    .callsign-box p { color: #888; font-size: 0.9rem; }
+
+    .callsign-box input {
+      background: #111;
+      border: 1px solid #444;
+      color: #00ff88;
+      padding: 0.6rem 1rem;
+      font-size: 1.1rem;
+      width: 100%;
+      border-radius: 4px;
+      margin: 0.5rem 0 1rem;
+      text-align: center;
+      letter-spacing: 2px;
+      font-family: monospace;
+    }
+
+    .callsign-box button {
+      background: #00ff88;
+      border: none;
+      color: #101010;
+      padding: 0.6rem 2rem;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* ── Nav ── */
     nav {
       display: flex;
       justify-content: center;
-      gap: 1.5rem;
+      gap: 1rem;
       margin-bottom: 2rem;
+      flex-wrap: wrap;
     }
 
     nav a {
@@ -30,9 +123,10 @@
       text-decoration: none;
       font-weight: bold;
       border: 1px solid #00ff88;
-      padding: 0.5rem 1rem;
+      padding: 0.4rem 0.9rem;
       border-radius: 4px;
       background: #000;
+      font-size: 0.85rem;
     }
 
     nav a:hover {
@@ -40,98 +134,234 @@
       color: #101010;
     }
 
+    /* ── Grid ── */
     .dashboard {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2rem;
-      padding: 0 2rem;
+      gap: 1.5rem;
+      padding: 0 1rem;
     }
 
     .panel {
       background: #181818;
-      border: 1px solid #333;
+      border: 1px solid #222;
       border-radius: 6px;
       padding: 1rem;
     }
 
-    h2 {
+    .panel h2 {
       margin-top: 0;
-      font-size: 1.1rem;
-      border-bottom: 1px solid #333;
-      padding-bottom: 0.3rem;
+      font-size: 0.95rem;
+      border-bottom: 1px solid #222;
+      padding-bottom: 0.4rem;
+      color: #00ff88;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
     pre {
       white-space: pre-wrap;
-      font-size: 0.9em;
+      font-size: 0.85em;
+      color: #aaa;
+      margin: 0;
     }
 
-    canvas {
-      background: #000;
-      border: 1px solid #333;
-      margin-top: 1rem;
-      width: 100%;
-      height: 200px;
+    /* ── Mini Leaderboard ── */
+    .lb-entry {
+      display: flex;
+      align-items: center;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #1a1a1a;
+      font-size: 0.85rem;
     }
+
+    .lb-rank { width: 2rem; color: #555; }
+    .lb-rank.r1 { color: #ffd700; }
+    .lb-rank.r2 { color: #c0c0c0; }
+    .lb-rank.r3 { color: #cd7f32; }
+
+    .lb-name { flex: 1; color: #ccc; }
+    .lb-name.me { color: #00ff88; }
+    .lb-score { color: #00ff88; font-weight: bold; }
+    .lb-score.neg { color: #ff4444; }
+
+    .lb-empty { color: #333; font-size: 0.8rem; padding: 0.5rem 0; }
+
+    .live-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: #ff0044;
+      border-radius: 50%;
+      margin-right: 5px;
+      animation: blink 1.2s step-start infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
   </style>
 </head>
 <body>
 
-  <h1>🧠 Nmap Firing Range Dashboard</h1>
-
-  <nav>
-    <a href="scorecard.html">Scorecard</a>
-    <a href="logger.html">Syslog</a>
-    <a href="tcpdump.html">Tcpdump</a>
-    <a href="docs.html">Docs</a>
-  </nav>
-
-  <div class="dashboard">
-    <div class="panel">
-      <h2>🧾 Session Info</h2>
-      <pre id="session-info">
-Loading...
-      </pre>
-    </div>
-
-    <div class="panel">
-      <h2>📦 Running Containers</h2>
-      <pre id="containers">
-Loading...
-      </pre>
-    </div>
-
-    <div class="panel" style="grid-column: span 2;">
-      <h2>📈 Network/Port Activity (Coming Soon)</h2>
-      <canvas id="chart"></canvas>
+  <!-- Callsign overlay -->
+  <div id="callsign-overlay">
+    <div class="callsign-box">
+      <h2>[ IDENTIFY YOURSELF ]</h2>
+      <p>Enter your operator callsign to participate in the CTF.</p>
+      <input type="text" id="callsign-input" placeholder="YOUR_CALLSIGN" maxlength="24" autocomplete="off" />
+      <br>
+      <button onclick="saveCallsign()">ENTER THE RANGE</button>
     </div>
   </div>
 
-  <script> 
-    // Populate Session Info (from /etc/score_card or score.json)
-    // Load session data from CGI instead of raw file
-    fetch("/cgi-bin/session_info.cgi")
-      .then(r => r.text())
-      .then(data => {
-        const session = data.match(/^session=.*$/m);
-        const hostname = data.match(/^#.*?on (.*?) at/m);
-        document.getElementById('session-info').textContent =
-      (hostname ? "Host: " + hostname[1] + "\n" : "") +
-      (session ? session[0] : "No session found");
-    })
-    .catch(() => {
-      document.getElementById('session-info').textContent = "Could not load session info.";
+  <div class="site-header">
+    <h1>&#9654; Nmap Firing Range</h1>
+    <div class="tagline">// Fingerprinting CTF &mdash; Dashboard //</div>
+    <div class="callsign-bar">
+      Operator: <span id="callsign-display">---</span>
+      <a onclick="changeCallsign()">[change]</a>
+    </div>
+  </div>
+
+  <nav>
+    <a href="scorecard.html">Scorecard</a>
+    <a href="leaderboard.html">Leaderboard</a>
+    <a href="logger.html">Syslog</a>
+    <a href="tcpdump.html">Tcpdump</a>
+  </nav>
+
+  <div class="dashboard">
+
+    <div class="panel">
+      <h2>&#9632; Session Info</h2>
+      <pre id="session-info">Loading...</pre>
+    </div>
+
+    <div class="panel">
+      <h2>&#9632; Running Containers</h2>
+      <pre id="containers">Loading...</pre>
+    </div>
+
+    <div class="panel">
+      <h2>
+        <span class="live-dot"></span>
+        Live Leaderboard
+      </h2>
+      <div id="mini-lb"><div class="lb-empty">No scores yet.</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>&#9632; Quick Reference</h2>
+      <pre style="color:#555; font-size:0.8em;">
+1. Run nmap against the targets
+2. Identify each service + port
+3. Grab the flag from each emulator
+4. Submit via Scorecard
+5. Check Leaderboard for standings
+
+nmap -sV -p- &lt;target-ip&gt;
+      </pre>
+    </div>
+
+  </div>
+
+  <script>
+    /* ── Callsign ── */
+    function getCallsign() {
+      return localStorage.getItem('callsign') || '';
+    }
+
+    function saveCallsign() {
+      const val = document.getElementById('callsign-input').value.trim().toUpperCase();
+      if (!val) return;
+      localStorage.setItem('callsign', val);
+      document.getElementById('callsign-overlay').classList.remove('visible');
+      applyCallsign(val);
+    }
+
+    function changeCallsign() {
+      document.getElementById('callsign-input').value = getCallsign();
+      document.getElementById('callsign-overlay').classList.add('visible');
+    }
+
+    document.getElementById('callsign-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') saveCallsign();
     });
 
-  // List running containers
-    fetch("/cgi-bin/containers.cgi")
+    function applyCallsign(cs) {
+      document.getElementById('callsign-display').textContent = cs || '---';
+    }
+
+    /* ── Panels ── */
+    fetch('/cgi-bin/session_info.cgi')
       .then(r => r.text())
       .then(data => {
-        document.getElementById('containers').textContent = data;
+        const session  = data.match(/^session=.*$/m);
+        const hostname = data.match(/^#.*?on (.*?) at/m);
+        document.getElementById('session-info').textContent =
+          (hostname ? 'Host: ' + hostname[1] + '\n' : '') +
+          (session  ? session[0] : 'No session found');
       })
       .catch(() => {
-        document.getElementById('containers').textContent = "Error loading containers.";
+        document.getElementById('session-info').textContent = 'Could not load session info.';
       });
+
+    fetch('/cgi-bin/containers.cgi')
+      .then(r => r.text())
+      .then(data => {
+        document.getElementById('containers').textContent = data || '(none running)';
+      })
+      .catch(() => {
+        document.getElementById('containers').textContent = 'Error loading containers.';
+      });
+
+    /* ── Mini Leaderboard ── */
+    function rankClass(i) {
+      if (i === 0) return 'r1';
+      if (i === 1) return 'r2';
+      if (i === 2) return 'r3';
+      return '';
+    }
+
+    function refreshLeaderboard() {
+      const me = getCallsign().toUpperCase();
+      fetch('/cgi-bin/leaderboard.cgi')
+        .then(r => r.json())
+        .then(data => {
+          const lb = document.getElementById('mini-lb');
+          if (!data || data.length === 0) {
+            lb.innerHTML = '<div class="lb-empty">No scores yet.</div>';
+            return;
+          }
+          const top = data.slice(0, 5);
+          lb.innerHTML = top.map((e, i) => {
+            const isMe = me && e.player.toUpperCase() === me;
+            const sc = e.score >= 0
+              ? `<span class="lb-score">+${e.score}</span>`
+              : `<span class="lb-score neg">${e.score}</span>`;
+            return `<div class="lb-entry">
+              <span class="lb-rank ${rankClass(i)}">#${i+1}</span>
+              <span class="lb-name${isMe ? ' me' : ''}">${e.player}${isMe ? ' &#9664;' : ''}</span>
+              ${sc}
+            </div>`;
+          }).join('');
+        })
+        .catch(() => {});
+    }
+
+    /* ── Init ── */
+    function init() {
+      const cs = getCallsign();
+      if (!cs) {
+        document.getElementById('callsign-overlay').classList.add('visible');
+      } else {
+        applyCallsign(cs);
+      }
+      refreshLeaderboard();
+      setInterval(refreshLeaderboard, 10000);
+    }
+
+    init();
   </script>
 
 </body>

@@ -84,7 +84,7 @@ handle_quit() {
 
 main() {
   greet
-  while IFS= read -r line || [[ -n "$line" ]]; do
+  while IFS= read -r -t 30 line; do
     # Very basic parse
     cmd=${line%% *}
     args=${line#* }

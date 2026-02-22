@@ -74,7 +74,7 @@ handle_search() {
 
 # Main loop
 banner
-while IFS= read -r line || [[ -n "$line" ]]; do
+while IFS= read -r -t 30 line; do
   # parse command and args
   cmd=$(echo "$line" | awk '{print tolower($1)}')
   args="${line#* }"

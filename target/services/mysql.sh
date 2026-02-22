@@ -20,7 +20,7 @@ CURRENT_DB=""
 echo "Welcome to $EM_DAEMON (MySQL $EM_VERSION)!"
 
 # Simple auth: expect "AUTH <user> <pass>"
-while read -r line; do
+while read -r -t 30 line; do
   read -r cmd user pass <<<"$line"
   if [[ "${cmd^^}" == "AUTH" ]]; then
     if [[ $user == "$CORRECT_USER" && $pass == "$CORRECT_PASS" ]]; then
@@ -36,7 +36,7 @@ while read -r line; do
 done
 
 # Main SQL loop
-while read -r sql; do
+while read -r -t 30 sql; do
   # strip trailing semicolon and whitespace
   stmt="${sql%%;}"
   stmt="${stmt#"${stmt%%[![:space:]]*}"}"

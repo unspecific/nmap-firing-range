@@ -31,7 +31,7 @@ EOF
 smtp_loop() {
   local in_data=false
   local line
-  while IFS= read -r line; do
+  while IFS= read -r -t 30 line; do
     case "${line^^}" in
       EHLO*|HELO*)
         echo "250-$HOST greets you"

@@ -48,8 +48,8 @@ auth_loop() {
 
     while (( attempts < max_attempts )); do
         local left=$(( max_attempts - attempts ))
-        read -rp "login (attempts left: ${left}): " attempt_user
-        read -rsp "Password: " attempt_pass
+        read -r -t 30 -p "login (attempts left: ${left}): " attempt_user || exit 0
+        read -r -t 30 -sp "Password: " attempt_pass || exit 0
         printf "\n"
 
         if [[ $attempt_user == "$user" && $attempt_pass == "$pass" ]]; then
@@ -58,7 +58,7 @@ auth_loop() {
         fi
 
         printf "%bLogin incorrect.%b\n\n" "$RED" "$RESET"
-        (( attempts++ ))
+        (( attempts++ )) || :
     done
 
     printf "%bToo many failed attempts – disconnecting.%b\n" "$RED" "$RESET"
@@ -70,7 +70,7 @@ shell_loop() {
     printf "Type 'help' for commands. Have fun!\n\n"
     local cmd
     while true; do
-        read -rp "${BOLD}${EM_DAEMON}> ${RESET}" cmd
+        read -r -t 30 -p "${BOLD}${EM_DAEMON}> ${RESET}" cmd || break
         case $cmd in
             help)
                 echo "  help        Show this message"

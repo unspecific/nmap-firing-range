@@ -26,7 +26,7 @@ banner() {
 # Handle login
 auth_loop() {
   while (( attempts < MAX_ATTEMPTS )); do
-    read -r line || exit 0
+    read -r -t 30 line || exit 0
     cmd=${line%% *}; arg=${line#* }
 
     case "${cmd^^}" in
@@ -41,7 +41,7 @@ auth_loop() {
           authenticated=true
           return
         else
-          ((attempts++))
+          (( attempts++ )) || :
           echo -e "530 Login incorrect (${attempts}/${MAX_ATTEMPTS})"
           if (( attempts >= MAX_ATTEMPTS )); then
             echo -e "421 Too many failed attempts – closing connection"
@@ -62,7 +62,7 @@ auth_loop() {
 
 # Main FTP loop after auth
 ftp_loop() {
-  while read -r line || [[ -n "$line" ]]; do
+  while read -r -t 30 line; do
     cmd=${line%% *}; arg=${line#* }
 
     case "${cmd^^}" in

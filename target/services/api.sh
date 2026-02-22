@@ -30,20 +30,20 @@ EOF
 
 # Read request line + headers + optional JSON body
 read_request() {
-  read -r request_line || return 1
+  read -r -t 30 request_line || return 1
   method=${request_line%% *}
   full_path=${request_line#* }; full_path=${full_path%% *}
   # Drop version
   # Collect headers
   headers=(); content_length=0; auth_header=""
-  while IFS= read -r hdr && [[ -n "$hdr" ]]; do
+  while IFS= read -r -t 30 hdr && [[ -n "$hdr" ]]; do
     headers+=( "$hdr" )
     [[ $hdr =~ ^Content-Length:\ ([0-9]+) ]] && content_length=${BASH_REMATCH[1]}
     [[ $hdr =~ ^Authorization:\ (.+) ]]   && auth_header=${BASH_REMATCH[1]}
   done
   body=""
   if [[ $method =~ ^(POST|PUT)$ ]] && (( content_length > 0 )); then
-    read -rn "$content_length" body
+    read -r -t 30 -n "$content_length" body || return 1
   fi
 }
 
@@ -76,7 +76,7 @@ route() {
       # expect JSON: {"user":"...","pass":"..."}
       if [[ $body =~ \"user\"\ *:\ *\"([^"]+)\" ]] && [[ $body =~ \"pass\"\ *:\ *\"([^"]+)\" ]]; then
         user="${BASH_REMATCH[1]}"
-        pass="${BASH_REMATCH[1]}"  # for demo assume pass==user
+        pass="${BASH_REMATCH[2]}"
       else
         send_json 400 "{\"error\":\"Bad JSON\"}"
         return

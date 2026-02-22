@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # muck_data.sh
 # Usage:
 #   Encrypt: ./muck_data.sh "plaintext" "key"
 #   Decrypt: ./muck_data.sh -d "hexcipher" "key"
 
 decrypt=false
-if [[ $1 == "-d" ]]; then
+if [[ "${1:-}" == "-d" ]]; then
   decrypt=true
   shift
 fi
 
-input="$1"
-key="$2"
+input="${1:?Usage: muck_data.sh [-d] input key}"
+key="${2:?Usage: muck_data.sh [-d] input key}"
 
 # Build an array of key-bytes
 read -r -a K < <(echo -n "$key" | od -An -tx1)

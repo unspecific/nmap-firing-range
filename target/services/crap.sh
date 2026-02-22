@@ -91,7 +91,7 @@ get_response() {
 main() {
   banner
   # Read loop (handles last line without newline)
-  while IFS= read -r line || [[ -n "$line" ]]; do
+  while IFS= read -r -t 30 line; do
     get_response "$line"
   done
   echo "[DEBUG] Client disconnected"
