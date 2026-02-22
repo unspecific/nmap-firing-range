@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Nmap Firing Range // VPN Access</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      background: #101010;
+      color: #00ff88;
+      font-family: monospace;
+      margin: 0;
+      padding: 1rem;
+    }
+
+    .site-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .site-header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #00ffaa;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .site-header .tagline {
+      color: #2a6a4a;
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      margin-top: 0.3rem;
+    }
+
+    nav {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    nav a {
+      color: #0f0;
+      text-decoration: none;
+      font-weight: bold;
+      border: 1px solid #00ff88;
+      padding: 0.4rem 0.9rem;
+      border-radius: 4px;
+      background: #000;
+      font-size: 0.85rem;
+    }
+
+    nav a:hover, nav a.active {
+      background: #00ff88;
+      color: #101010;
+    }
+
+    .content {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .panel {
+      background: #181818;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 1.2rem 1.4rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      font-size: 0.95rem;
+      border-bottom: 1px solid #222;
+      padding-bottom: 0.4rem;
+      color: #00ff88;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .cred-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .cred-table td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #1a1a1a;
+      vertical-align: top;
+    }
+
+    .cred-table td:first-child {
+      color: #555;
+      width: 9rem;
+      white-space: nowrap;
+    }
+
+    .cred-table td:last-child {
+      color: #00ff88;
+      word-break: break-all;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid #333;
+      color: #555;
+      font-family: monospace;
+      font-size: 0.75rem;
+      padding: 0.1rem 0.4rem;
+      margin-left: 0.5rem;
+      border-radius: 3px;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+
+    .copy-btn:hover { border-color: #00ff88; color: #00ff88; }
+
+    .os-section { margin-bottom: 1rem; }
+
+    .os-section h3 {
+      font-size: 0.85rem;
+      color: #00ffaa;
+      margin: 0.8rem 0 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .os-section ol {
+      margin: 0;
+      padding-left: 1.4rem;
+      color: #aaa;
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+
+    .os-section code {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      padding: 0.1rem 0.4rem;
+      color: #00ff88;
+      font-size: 0.82em;
+    }
+
+    .disabled-msg {
+      color: #555;
+      font-size: 0.9rem;
+      padding: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="site-header">
+    <h1>&#9654; Nmap Firing Range</h1>
+    <div class="tagline">// VPN Access //</div>
+  </div>
+
+  <nav>
+    <a href="index.html">Dashboard</a>
+    <a href="scorecard.html">Scorecard</a>
+    <a href="leaderboard.html">Leaderboard</a>
+    <a href="logger.html">Syslog</a>
+    <a href="tcpdump.html">Tcpdump</a>
+    <a href="vpn.html" class="active">VPN Access</a>
+  </nav>
+
+  <div class="content">
+
+    <div class="panel" id="creds-panel">
+      <h2>&#9632; VPN Credentials</h2>
+      <div id="creds-body"><span style="color:#555">Loading...</span></div>
+    </div>
+
+    <div class="panel" id="instructions-panel" style="display:none">
+      <h2>&#9632; Connection Instructions</h2>
+
+      <div class="os-section">
+        <h3>Windows</h3>
+        <ol>
+          <li>Open <strong>Settings → Network &amp; Internet → VPN</strong></li>
+          <li>Click <strong>Add a VPN connection</strong></li>
+          <li>VPN provider: <code>Windows (built-in)</code></li>
+          <li>Connection name: <code>NFR Lab</code></li>
+          <li>Server name or address: <code id="win-endpoint">—</code></li>
+          <li>VPN type: <code>L2TP/IPsec with pre-shared key</code></li>
+          <li>Pre-shared key: <code id="win-psk">—</code></li>
+          <li>Username / Password: as shown above</li>
+          <li>Save, then click <strong>Connect</strong></li>
+        </ol>
+      </div>
+
+      <div class="os-section">
+        <h3>macOS</h3>
+        <ol>
+          <li>Open <strong>System Settings → VPN</strong></li>
+          <li>Click <strong>Add VPN Configuration → L2TP over IPSec</strong></li>
+          <li>Display name: <code>NFR Lab</code></li>
+          <li>Server address: <code id="mac-endpoint">—</code></li>
+          <li>Account name: <code id="mac-user">—</code></li>
+          <li>Click <strong>Authentication Settings</strong> → enter Password and Shared Secret (PSK)</li>
+          <li>Connect</li>
+        </ol>
+      </div>
+
+      <div class="os-section">
+        <h3>Linux (NetworkManager)</h3>
+        <ol>
+          <li>Install the L2TP plugin if needed: <code>sudo apt install network-manager-l2tp-gnome</code></li>
+          <li>Open <strong>Network Settings → VPN → Add → Layer 2 Tunneling Protocol (L2TP)</strong></li>
+          <li>Gateway: <code id="linux-endpoint">—</code></li>
+          <li>Username / Password: as shown above</li>
+          <li>Click <strong>IPsec Settings</strong> → enable, enter Pre-shared key</li>
+          <li>Or via CLI:
+            <code>nmcli con add type vpn vpn-type l2tp con-name NFR-Lab ifname -- vpn.data "gateway=<span id="linux-ep-inline">—</span>,ipsec-enabled=yes,ipsec-psk=<span id="linux-psk-inline">—</span>,user=<span id="linux-user-inline">—</span>" vpn.secrets "password=<span id="linux-pass-inline">—</span>"</code>
+          </li>
+        </ol>
+      </div>
+
+      <div class="os-section">
+        <h3>iOS / Android</h3>
+        <ol>
+          <li><strong>iOS</strong>: Settings → General → VPN &amp; Device Management → VPN → Add VPN Configuration → Type: L2TP</li>
+          <li><strong>Android</strong>: Settings → Network → VPN → Add VPN → Type: L2TP/IPSec PSK</li>
+          <li>Server: <code id="mob-endpoint">—</code>, Account / Password, Secret (PSK): as shown above</li>
+        </ol>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    fetch('/cgi-bin/vpn_info.cgi')
+      .then(r => r.json())
+      .then(data => {
+        const body = document.getElementById('creds-body');
+        if (!data.enabled) {
+          body.innerHTML = '<div class="disabled-msg">VPN container was not launched for this session.<br>Re-run <code>launch_lab.sh -W</code> to enable it.</div>';
+          return;
+        }
+
+        function copyBtn(id) {
+          return `<button class="copy-btn" onclick="copyVal('${id}')">[copy]</button>`;
+        }
+
+        body.innerHTML = `
+          <table class="cred-table">
+            <tr><td>Endpoint</td><td><span id="v-ep">${data.endpoint}</span>${copyBtn('v-ep')}</td></tr>
+            <tr><td>PSK</td><td><span id="v-psk">${data.psk}</span>${copyBtn('v-psk')}</td></tr>
+            <tr><td>Username</td><td><span id="v-user">${data.username}</span>${copyBtn('v-user')}</td></tr>
+            <tr><td>Password</td><td><span id="v-pass">${data.password}</span>${copyBtn('v-pass')}</td></tr>
+            <tr><td>Lab Network</td><td><span id="v-net">${data.network}</span></td></tr>
+          </table>`;
+
+        // populate per-OS instruction placeholders
+        ['win','mac','linux','mob'].forEach(p => {
+          const el = document.getElementById(p + '-endpoint');
+          if (el) el.textContent = data.endpoint;
+        });
+        ['win'].forEach(p => {
+          const el = document.getElementById(p + '-psk');
+          if (el) el.textContent = data.psk;
+        });
+        ['mac'].forEach(p => {
+          const el = document.getElementById(p + '-user');
+          if (el) el.textContent = data.username;
+        });
+        const ids = {
+          'linux-ep-inline': data.endpoint,
+          'linux-psk-inline': data.psk,
+          'linux-user-inline': data.username,
+          'linux-pass-inline': data.password,
+        };
+        for (const [id, val] of Object.entries(ids)) {
+          const el = document.getElementById(id);
+          if (el) el.textContent = val;
+        }
+
+        document.getElementById('instructions-panel').style.display = '';
+      })
+      .catch(() => {
+        document.getElementById('creds-body').innerHTML =
+          '<div class="disabled-msg">Could not load VPN info.</div>';
+      });
+
+    function copyVal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent).catch(() => {});
+    }
+  </script>
+
+</body>
+</html>

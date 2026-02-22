@@ -687,6 +687,8 @@ Options:
   -t             Skip TLS/SSL cert generation and encrypted ports
   -p             Skip plain-text (unencrypted) protocols
   -s <service>   Launch only the named service (use -l to list)
+  -W             Launch a VPN container (L2TP/IPSec + PSK)
+  -E <ip>        Public endpoint IP for VPN clients (auto-detected by default)
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
@@ -745,10 +747,12 @@ list_services_only=false
 single_service=""
 REPLAY_SESSION_ID=""
 NUM_SERVICES=5
+launch_vpn=false
+VPN_ENDPOINT=""
 
 # ─── Parse Options ────────────────────────────────────────────────────────────
 # the leading ':' means we handle missing-arg errors in the case ':'
-while getopts ":n:di:pts:lVh" opt; do
+while getopts ":n:di:pts:lVhWE:" opt; do
   case "$opt" in
     n)  NUM_SERVICES="$OPTARG" ;;
     d)  dry_run=true ;;
@@ -757,6 +761,8 @@ while getopts ":n:di:pts:lVh" opt; do
     p)  skip_plain=true ;;
     s)  single_service="$OPTARG" ;;
     l)  list_services_only=true ;;
+    W)  launch_vpn=true ;;
+    E)  VPN_ENDPOINT="$OPTARG" ;;
     V)  echo "$APP_SHORT v$VERSION"; exit 0 ;;
     h)  usage; exit 0 ;;
     :)  echo "❌ Option -$OPTARG requires an argument." >&2; usage; exit 1 ;;
@@ -935,6 +941,32 @@ else
   log silent " ⚠️  TLS setup skipped (--no-tls enabled)"
 fi
 
+# ─── VPN Setup ────────────────────────────────────────────────────────────────
+VPN_PSK="" VPN_USER="" VPN_PASS=""
+if [[ "$launch_vpn" == true ]]; then
+  # Auto-detect endpoint if not specified
+  if [[ -z "$VPN_ENDPOINT" ]]; then
+    VPN_ENDPOINT=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{print $7; exit}')
+    VPN_ENDPOINT="${VPN_ENDPOINT:-127.0.0.1}"
+  fi
+  # Check /dev/ppp exists; create it if not
+  if [[ ! -c /dev/ppp ]]; then
+    log console " ⚠️  /dev/ppp not found — creating it (required for VPN container)"
+    mknod /dev/ppp c 108 0 || log console " ❌  Failed to create /dev/ppp — VPN container may not start"
+  fi
+  VPN_PSK=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)
+  VPN_USER="vpn$(openssl rand -hex 3)"
+  VPN_PASS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 16)
+  cat > "$SESSION_DIR/vpn.txt" <<VPNEOF
+endpoint=$VPN_ENDPOINT
+psk=$VPN_PSK
+username=$VPN_USER
+password=$VPN_PASS
+network=$SUBNET.0/24
+VPNEOF
+  log console " 🔒  VPN credentials generated (endpoint: $VPN_ENDPOINT)"
+fi
+
 # ─── Subnet Announcement ────────────────────────────────────────────────────
 log console " 🌐  Creating subnet for scanning: ${SUBNET}.0/24 ($NETWORK)"
 
@@ -1044,7 +1076,11 @@ cat >> "$compose_file" <<EOF
       - ${SYSLOG_FILE}:/var/log/containers:rw
       - ${SESSION_DIR}/${LOG_DIR}/tcpdump:/var/log/tcpdump:rw
       - ${SESSION_DIR}/${TARGET_DIR}:/opt/target:rw
-      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro
+      - ${LAB_DIR}/conf/web_score_card:/opt/web:ro$(
+        if [[ "$launch_vpn" == true ]]; then
+          printf "\n      - %s/vpn.txt:/etc/vpn.txt:ro" "$SESSION_DIR"
+        fi
+      )
     expose:
       - "514/udp"
       - "53/udp"
@@ -1171,6 +1207,44 @@ EOF
   fi
 
 done
+
+# ─── VPN Container ────────────────────────────────────────────────────────────
+if [[ "$launch_vpn" == true ]]; then
+  vpn_container_name="vpn_${SESSION_ID}"
+  cat >> "$compose_file" <<EOF
+  vpn:
+    image: hwdsl2/ipsec-vpn-server
+    container_name: ${vpn_container_name}
+    networks:
+      ${NETWORK}:
+        ipv4_address: ${SUBNET}.1
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/ppp
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.accept_redirects=0
+      - net.ipv4.conf.all.send_redirects=0
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.accept_redirects=0
+      - net.ipv4.conf.default.send_redirects=0
+      - net.ipv4.conf.default.rp_filter=0
+    environment:
+      - VPN_IPSEC_PSK=${VPN_PSK}
+      - VPN_USER=${VPN_USER}
+      - VPN_PASSWORD=${VPN_PASS}
+    ports:
+      - "500:500/udp"
+      - "4500:4500/udp"
+    restart: unless-stopped
+
+EOF
+  echo "$vpn_container_name" >> "$services_map"
+  log silent "✔ Added VPN container ($vpn_container_name) to Compose"
+fi
+
 # ─── Append network section ────────────────────────────────────────────────
 compose_file="$SESSION_DIR/$COMPOSE_FILE"
 cat >> "$compose_file" <<EOF
@@ -1237,6 +1311,23 @@ log console "     nmap -v $SUBNET.0/24"
 log console "  try adding --dns-servers $SUBNET.2 for nme resolution."
 log console "         or visit http://console.nfr.lab/"
 echo
+
+# ─── VPN connection info ────────────────────────────────────────────────────
+if [[ "$launch_vpn" == true ]]; then
+  log console " 🔒  VPN Access (L2TP/IPSec + PSK)"
+  log console "    Endpoint : $VPN_ENDPOINT"
+  log console "    PSK      : $VPN_PSK"
+  log console "    Username : $VPN_USER"
+  log console "    Password : $VPN_PASS"
+  log console "    Network  : $SUBNET.0/24"
+  log console ""
+  log console "  Windows : Settings → VPN → Add → L2TP/IPSec with PSK"
+  log console "  macOS   : System Settings → VPN → Add → L2TP over IPSec"
+  log console "  Linux   : nmcli con add type vpn vpn-type l2tp ..."
+  log console "  Mobile  : Built-in VPN → L2TP (iOS/Android)"
+  log console "         or visit http://console.nfr.lab/vpn.html"
+  echo
+fi
 
 # ─── Report duration ───────────────────────────────────────────────────────
 duration=$SECONDS
