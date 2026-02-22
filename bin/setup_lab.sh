@@ -10,7 +10,8 @@ VERSION="2.2.9"
 # ─── Elevate to root if needed ────────────────────────────────────────
 if [[ "$EUID" -ne 0 ]]; then
   echo "🔒 Root access required. Re-running with sudo..."
-  exec sudo "$(realpath "$0")" "$@"
+  _self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  exec sudo bash "$_self" "$@"
 fi
 
 echo
