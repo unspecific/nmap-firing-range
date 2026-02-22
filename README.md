@@ -37,6 +37,17 @@ cleanup_lab
 **Requirements:** Docker, `docker compose`, ~100 MB disk (image).
 **WiFi mode** (`-A`) additionally needs: a USB WiFi adapter with AP support, `iw`, `net.ipv4.ip_forward=1`.
 
+**System changes made by setup** (all reversed by `setup_lab.sh --uninstall`):
+
+| What | Where |
+|---|---|
+| Install directory | `/opt/firing-range/` |
+| Command symlinks | First writable entry in your `$PATH` (e.g. `/usr/local/sbin/`) |
+| Group created | `nfrlab` — current user added to it |
+
+`launch_lab` also adds a `console.nfr.lab` entry to `/etc/hosts` at session start;
+`cleanup_lab` removes it.
+
 ---
 
 ## 🔥 Nmap Firing Range Project

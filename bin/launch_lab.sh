@@ -8,7 +8,7 @@ if [[ $EUID -ne 0 && "$SKIP_SUDO" != "true" ]]; then
   if [[ "$DEBUG" == "true" ]]; then
     echo "Relaunching in DEBUG mode..."
     exec sudo DEBUG=true "$0" "$@"
-  fi 
+  fi
   exec sudo "$0" "$@"
 fi
 
@@ -1111,6 +1111,25 @@ shift $((OPTIND -1))
 echo
 log console " 🎩  $APP v$VERSION - Lee 'MadHat' Heath <lheath@unspecific.com>"
 
+
+# ─── Check for already-running session ────────────────────────────────────────
+if [[ "$list_services_only" != true ]]; then
+  _running_nets=$(docker network ls --format ‘{{.Name}}’ 2>/dev/null \
+    | grep -E ‘^range-[0-9a-f]{8}$’ || true)
+  if [[ -n "$_running_nets" ]]; then
+    log console " ⚠️  An NFR lab session is already running:"
+    while IFS= read -r _net; do
+      _sid="${_net#range-}"
+      log console "      session $_sid  (run: cleanup_lab  or replay: launch_lab -i $_sid)"
+    done <<< "$_running_nets"
+    echo >&2
+    read -rp " ❓  Launch a new session alongside? (y/n): " _confirm </dev/tty || _confirm="n"
+    if [[ ! "$_confirm" =~ ^[Yy]$ ]]; then
+      exit 0
+    fi
+  fi
+  unset _running_nets _net _sid _confirm
+fi
 
 # 2) Prepare session folder (unless we’re just listing)
 SESSION_TIME=$(date +"%Y-%m-%d_%H-%M-%S")

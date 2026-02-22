@@ -464,10 +464,27 @@ uninstall() {
   ROLLBACK_FILE="$INSTALL_DIR/installed_files.txt"
 
   log console " 🗑  Uninstalling Firing Range from $INSTALL_DIR…"
-  
+
   if [[ ! -d "$INSTALL_DIR" || -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
     log console "❌ No installation detected in $INSTALL_DIR. Nothing to uninstall."
     exit 1
+  fi
+
+  # ─── Check for running lab sessions before wiping files ───────────────────
+  _running_nets=$(docker network ls --format '{{.Name}}' 2>/dev/null \
+    | grep -E '^range-[0-9a-f]{8}$' || true)
+  if [[ -n "$_running_nets" ]]; then
+    log console " ⚠️  Active NFR lab session(s) detected — containers are still running:"
+    while IFS= read -r _net; do
+      _sid="${_net#range-}"
+      log console "      session $_sid  (docker network: $_net)"
+    done <<< "$_running_nets"
+    log console "    Run 'cleanup_lab' first to stop the session, then retry --uninstall."
+    if [[ "$FORCE" == true ]]; then
+      log console " ⚠️  --force specified; proceeding anyway (containers will be orphaned)."
+    else
+      exit 1
+    fi
   fi
 
   log console " 🚨  Uninstalling Firing Range..."
