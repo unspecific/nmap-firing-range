@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Skip sudo for informational flags
+if [[ "$*" =~ (^| )(--help|-h)( |$) ]]; then
+  SKIP_SUDO=true
+fi
+
 # ─── Privilege check ─────────────────────────────────────────────────────────
-if [[ $EUID -ne 0 ]]; then
+if [[ $EUID -ne 0 && "${SKIP_SUDO:-false}" != "true" ]]; then
   echo " 🔒  Root access required. Re-running with sudo..."
   exec sudo "$0" "$@"
 fi
@@ -20,8 +25,32 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LAB_DIR="$PROJECT_ROOT"    # so logs/ is under PROJECT_ROOT/logs
 
+# ─── Help ────────────────────────────────────────────────────────────────────
+usage() {
+  cat <<EOF
+
+$APP v$VERSION by Lee 'MadHat' Heath <lheath@unspecific.com>
+
+Tears down a running lab session: stops and removes containers, networks,
+and volumes, removes /etc/hosts entries, and backs up the score card.
+
+Usage: $0 [OPTIONS] [score_card_file]
+
+Arguments:
+  score_card_file   Path to the score_card for the session to clean up.
+                    Defaults to ./score_card in the current directory.
+
+Options:
+  --help, -h        Show this help message and exit
+
+EOF
+}
+
 # ─── Determine the score_card file (default ./score_card) ───────────────────
-if [[ $# -gt 1 ]]; then
+if [[ $# -gt 0 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
+  usage
+  exit 0
+elif [[ $# -gt 1 ]]; then
   echo "Usage: $0 [score_card_file]" >&2
   exit 1
 elif [[ $# -eq 1 ]]; then

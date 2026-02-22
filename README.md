@@ -142,6 +142,8 @@ Options:
   -t             Skip TLS/SSL cert generation and encrypted ports
   -p             Skip plain-text (unencrypted) protocols
   -s <service>   Launch only the named service (use -l to list)
+  -W             Launch a VPN container (L2TP/IPSec + PSK)
+  -E <ip>        Public endpoint IP for VPN clients (auto-detected by default)
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
@@ -162,13 +164,26 @@ Once launched, point a browser to `http://console.nfr.lab/` (a `/etc/hosts` entr
 | Leaderboard | `/leaderboard.html` | Live ranked leaderboard for all players |
 | Syslog | `/logger.html` | Real-time container log stream |
 | TCPDump | `/tcpdump.html` | Live network packet capture viewer |
+| VPN Access | `/vpn.html` | VPN credentials and per-OS connection instructions (requires `-W`) |
 
 ```
 $ check_lab -h
+
+NFR-CheckLab v2.2.9 by Lee 'MadHat' Heath <lheath@unspecific.com>
+
+Scores a completed lab session by comparing your score_card submissions
+against the session's ground truth (mapping.txt).  Prints a breakdown of
+correct/incorrect answers and lists any services that were not attempted.
+
 Usage: check_lab [OPTIONS] [SCORE_CARD_FILE]
 
+Arguments:
+  SCORE_CARD_FILE   Path to the score_card file to score.
+                    Defaults to <install_dir>/score_card.
+
 Options:
-  --name NAME         Set the name displayed in the header (will be added to score_card)
+  --name NAME         Set the player name displayed in the header
+                      (written back into the score_card file)
   --help, -h          Show this help message and exit
 ```
 
@@ -178,12 +193,24 @@ The last script in the project is ***cleanup_lab***
 It removes all evidence of the lab session except for the lab directory (***/opt/firing-range/*** is the default)
 
 ```
-cleanup_lab
+$ cleanup_lab --help
+
+NFR Cleanup v2.2.9 by Lee 'MadHat' Heath <lheath@unspecific.com>
+
+Tears down a running lab session: stops and removes containers, networks,
+and volumes, removes /etc/hosts entries, and backs up the score card.
+
+Usage: cleanup_lab [OPTIONS] [score_card_file]
+
+Arguments:
+  score_card_file   Path to the score_card for the session to clean up.
+                    Defaults to ./score_card in the current directory.
+
+Options:
+  --help, -h        Show this help message and exit
 ```
 
-* need to make a help output.
-
-It is similar to check_lab where it looks for ***./score_card*** to used the session ID in the score_card for cleanup, or you can call it with a specific score_card.
+It looks for ***./score_card*** to use the session ID for cleanup, or you can call it with a specific score_card file.
 
 ---
 

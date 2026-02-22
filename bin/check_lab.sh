@@ -12,11 +12,24 @@ INSTALL_DIR="$(dirname "$(dirname "$SCRIPT_PATH")")"
 
 show_help() {
     cat << EOF
+
+$APP v$VERSION by Lee 'MadHat' Heath <lheath@unspecific.com>
+
+Scores a completed lab session by comparing your score_card submissions
+against the session's ground truth (mapping.txt).  Prints a breakdown of
+correct/incorrect answers and lists any services that were not attempted.
+
 Usage: check_lab [OPTIONS] [SCORE_CARD_FILE]
 
+Arguments:
+  SCORE_CARD_FILE   Path to the score_card file to score.
+                    Defaults to <install_dir>/score_card.
+
 Options:
-  --name NAME         Set the name displayed in the header (will be added to score_card)
+  --name NAME         Set the player name displayed in the header
+                      (written back into the score_card file)
   --help, -h          Show this help message and exit
+
 EOF
 }
 
