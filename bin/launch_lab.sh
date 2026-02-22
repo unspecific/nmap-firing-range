@@ -59,17 +59,17 @@ log() {
     target="$LOGFILE"
   fi
 
-  # ensure the directory exists
-  mkdir -p "$(dirname "$target")"
-  touch "$target"
-
   # console output when requested
   if [[ "$mode" == "console" || "$DEBUG" == "true" ]]; then
     echo -e "$message" >&2
   fi
 
-  # finally append
-  echo "$logline" >> "$target"
+  # write to log file only when writable (silently skip when running without root)
+  local log_dir
+  log_dir="$(dirname "$target")"
+  if mkdir -p "$log_dir" 2>/dev/null && touch "$target" 2>/dev/null; then
+    echo "$logline" >> "$target"
+  fi
 }
 
 # ─── Create a CA for the session's certs ───────────────────────────────── 

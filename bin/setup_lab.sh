@@ -7,8 +7,14 @@ trap 'cleanup; exit 1' ERR
 APP="NFR-SetupLab"
 VERSION="2.2.9"
 
+# ─── Skip sudo for flags that don't need root ─────────────────────────
+_SKIP_SUDO=false
+for _arg in "$@"; do
+  [[ "$_arg" == "-h" || "$_arg" == "--help" || "$_arg" == "-V" || "$_arg" == "--version" ]] && _SKIP_SUDO=true && break
+done
+
 # ─── Elevate to root if needed ────────────────────────────────────────
-if [[ "$EUID" -ne 0 ]]; then
+if [[ "$EUID" -ne 0 && "$_SKIP_SUDO" != "true" ]]; then
   echo "🔒 Root access required. Re-running with sudo..."
   _self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
   exec sudo bash "$_self" "$@"
