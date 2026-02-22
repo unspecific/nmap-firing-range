@@ -1,6 +1,44 @@
 
 # Nmap Firing Range
 
+## TL;DR
+
+A self-contained, randomized lab for practicing Nmap, recon, and service enumeration.
+Each session spins up Docker containers on a unique /24 subnet with random IPs,
+hostnames, credentials, and flags — so every run is different.
+
+```bash
+# Install (requires internet)
+curl -O https://raw.githubusercontent.com/unspecific/nmap-firing-range/main/bin/setup_lab.sh
+chmod +x setup_lab.sh && ./setup_lab.sh
+
+# Launch a solo session (5 targets)
+launch_lab
+
+# Scan it
+nmap -v 192.168.X.0/24 --dns-servers 192.168.X.2
+
+# Open the dashboard
+http://console.nfr.lab/
+
+# Clean up
+cleanup_lab
+```
+
+**Access modes:**
+
+| Command | Who can reach the lab |
+|---|---|
+| `launch_lab` | Host machine only (default) |
+| `launch_lab -M` | Anyone on your LAN (add a static route) |
+| `launch_lab -M -N` | Anyone on your LAN via IKEv2 VPN |
+| `launch_lab -A [iface]` | WiFi CTF — players connect to your AP, get VPN creds, scan away |
+
+**Requirements:** Docker, `docker compose`, ~100 MB disk (image).
+**WiFi mode** (`-A`) additionally needs: a USB WiFi adapter with AP support, `iw`, `net.ipv4.ip_forward=1`.
+
+---
+
 ## 🔥 Nmap Firing Range Project
 
 The **Nmap Firing Range** project began organically when one of our employees requested a way to practice using Nmap while studying for an upcoming certification exam. To accelerate development, we leveraged ChatGPT to assist in quickly gathering details about a wide range of network services, protocols, and application behaviors — helping us decrease the research and setup time significantly.

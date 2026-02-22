@@ -236,6 +236,247 @@ check_dependencies() {
 }
 
 
+# ─── Pre-flight check helpers ─────────────────────────────────────────────────
+
+# check_port_free <port> <proto>
+# Returns 0 if the port is free, 1 if already bound on any interface.
+# Proto: tcp (default) or udp.
+check_port_free() {
+  local port="$1" proto="${2:-tcp}"
+  local flag
+  [[ "$proto" == "udp" ]] && flag="-lun" || flag="-ltn"
+  # Column 5 in ss output is Local Address:Port — match lines ending in :<port>
+  ss "$flag" 2>/dev/null | awk -v p=":${port}" 'NR>1 && $5 ~ p"$" { found=1 } END { exit found+0 }'
+}
+
+# check_ip_forward
+# Returns 0 if enabled. Prints a detailed error and returns 1 if not.
+check_ip_forward() {
+  local val
+  val=$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo "0")
+  if [[ "$val" != "1" ]]; then
+    log console " ❌  IP forwarding is required for VPN routing but is currently disabled."
+    log console "     Enable temporarily : sysctl -w net.ipv4.ip_forward=1"
+    log console "     Enable permanently : add 'net.ipv4.ip_forward=1' to /etc/sysctl.conf"
+    log console "     NFR will not change this automatically — it may affect your connectivity."
+    return 1
+  fi
+}
+
+# check_ip_unassigned <ip>
+# Returns 0 if the IP is not assigned to any interface, 1 if it is.
+check_ip_unassigned() {
+  local ip="$1"
+  if ip addr show 2>/dev/null | grep -q "inet ${ip}/"; then
+    return 1
+  fi
+}
+
+# _list_wifi_interfaces
+# Outputs "iface<TAB>status" per line. Status is "free" or "connected (<SSID>)".
+_list_wifi_interfaces() {
+  local iface ssid
+  while IFS= read -r iface; do
+    [[ -z "$iface" ]] && continue
+    ssid=$(iw dev "$iface" link 2>/dev/null | awk '/SSID/{ print $2; exit }')
+    if [[ -n "$ssid" ]]; then
+      printf "%s\t%s\n" "$iface" "connected ($ssid)"
+    else
+      printf "%s\t%s\n" "$iface" "free"
+    fi
+  done < <(iw dev 2>/dev/null | awk '$1=="Interface"{ print $2 }')
+}
+
+# select_wifi_iface [requested_iface]
+# Validates or auto-selects a wireless interface for AP mode.
+# Prints the chosen interface name on stdout on success.
+# Returns 1 and logs a clear error if selection fails or the user cancels.
+select_wifi_iface() {
+  local requested="${1:-}"
+  local -a iface_list=() status_list=()
+  local iface status
+
+  while IFS=$'\t' read -r iface status; do
+    iface_list+=("$iface")
+    status_list+=("$status")
+  done < <(_list_wifi_interfaces)
+
+  local count=${#iface_list[@]}
+
+  if [[ $count -eq 0 ]]; then
+    log console " ❌  No wireless interfaces found."
+    log console "     If you plugged in a USB adapter, verify the OS loaded a driver for it."
+    log console "     Run: iw dev"
+    return 1
+  fi
+
+  if [[ -n "$requested" ]]; then
+    # Validate the explicitly specified interface
+    local found=false found_status=""
+    local i
+    for i in "${!iface_list[@]}"; do
+      if [[ "${iface_list[$i]}" == "$requested" ]]; then
+        found=true
+        found_status="${status_list[$i]}"
+        break
+      fi
+    done
+
+    if [[ "$found" == false ]]; then
+      log console " ❌  Wireless interface '$requested' was not found."
+      log console "     Available interfaces:"
+      for i in "${!iface_list[@]}"; do
+        log console "       ${iface_list[$i]}    ${status_list[$i]}"
+      done
+      return 1
+    fi
+
+    if [[ "$found_status" != "free" ]]; then
+      log console " ⚠️   '$requested' is currently $found_status."
+      log console "     Using it as an AP will drop that connection."
+      local confirm=""
+      read -r -t 30 -p "     Continue? [y/N] " confirm || true
+      if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        log console " ℹ️   Cancelled. Specify a different interface with: launch_lab -A <iface>"
+        return 1
+      fi
+    fi
+
+    echo "$requested"
+    return 0
+  fi
+
+  # No interface specified — auto-select
+  if [[ $count -eq 1 ]]; then
+    local auto_iface="${iface_list[0]}" auto_status="${status_list[0]}"
+    if [[ "$auto_status" != "free" ]]; then
+      log console " ⚠️   Only wireless interface found: $auto_iface ($auto_status)"
+      log console "     Using it as an AP will drop that connection."
+      local confirm=""
+      read -r -t 30 -p "     Continue? [y/N] " confirm || true
+      if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        log console " ℹ️   Cancelled. Specify a different interface with: launch_lab -A <iface>"
+        return 1
+      fi
+    else
+      log console " ℹ️   Using wireless interface: $auto_iface"
+    fi
+    echo "$auto_iface"
+    return 0
+  fi
+
+  # Multiple interfaces found — require explicit selection
+  log console " ❌  Multiple wireless interfaces found. Specify one with: launch_lab -A <iface>"
+  log console ""
+  for i in "${!iface_list[@]}"; do
+    log console "       ${iface_list[$i]}    ${status_list[$i]}"
+  done
+  log console ""
+  log console "     Example: launch_lab -A ${iface_list[0]}"
+  return 1
+}
+
+# preflight_checks
+# Runs all pre-flight checks based on active mode flags (multi_user, launch_vpn, launch_ap).
+# Sets LAN_IP and AP_IFACE as side effects on success.
+# Exits with a clear summary if any check fails.
+preflight_checks() {
+  local errors=0
+
+  # Detect primary LAN IP when multi-user or VPN mode is active
+  if [[ "$multi_user" == true || "$launch_vpn" == true ]]; then
+    LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{ print $7; exit }')
+    if [[ -z "$LAN_IP" ]]; then
+      log console " ❌  Could not detect the primary LAN IP address."
+      log console "     Check your network connection or ensure a default route exists."
+      (( errors++ )) || :
+    fi
+  fi
+
+  # -M: WebUI port 80 must be free on the LAN IP
+  if [[ "$multi_user" == true && -n "${LAN_IP:-}" ]]; then
+    if ! check_port_free "80" "tcp"; then
+      log console " ❌  Port 80/TCP is already in use."
+      log console "     Multi-user mode binds the WebUI to $LAN_IP:80."
+      log console "     Find the conflict: ss -tlnp | grep ':80'"
+      (( errors++ )) || :
+    fi
+  fi
+
+  # -N or -A: IKEv2 VPN ports must be free, ip_forward must be enabled
+  if [[ "$launch_vpn" == true ]]; then
+    if ! check_port_free "500" "udp"; then
+      log console " ❌  Port 500/UDP is already in use."
+      log console "     IKEv2 VPN requires this port to be free."
+      log console "     Find the conflict: ss -ulnp | grep ':500'"
+      (( errors++ )) || :
+    fi
+    if ! check_port_free "4500" "udp"; then
+      log console " ❌  Port 4500/UDP is already in use."
+      log console "     IKEv2 VPN NAT-T requires this port to be free."
+      log console "     Find the conflict: ss -ulnp | grep ':4500'"
+      (( errors++ )) || :
+    fi
+    if ! check_ip_forward; then
+      (( errors++ )) || :
+    fi
+  fi
+
+  # -A: AP IP must be unassigned, iw must be present, WiFi interface must be selectable
+  if [[ "$launch_ap" == true ]]; then
+    if ! check_ip_unassigned "10.13.37.1"; then
+      log console " ❌  IP address 10.13.37.1 is already assigned to an interface."
+      log console "     The WiFi AP requires this address to be available."
+      log console "     Check with: ip addr show | grep '10.13.37'"
+      (( errors++ )) || :
+    fi
+
+    if ! command -v iw >/dev/null 2>&1; then
+      log console " ❌  'iw' is required for WiFi AP mode but was not found."
+      log console "     Install it: apt-get install iw  (or equivalent for your distro)"
+      (( errors++ )) || :
+    else
+      local selected_iface
+      if ! selected_iface=$(select_wifi_iface "${AP_IFACE:-}"); then
+        (( errors++ )) || :
+      else
+        AP_IFACE="$selected_iface"
+      fi
+    fi
+  fi
+
+  # -N or -A: verify wifi-module Docker image is available (offer to load from .tgz)
+  if [[ "$launch_vpn" == true || "$launch_ap" == true ]]; then
+    local wifi_image="unspecific/fr-wifi-module:1.0"
+    local wifi_tgz="$LAB_DIR/conf/fr-wifi-module.tgz"
+    if ! docker image inspect "$wifi_image" >/dev/null 2>&1; then
+      if [[ -f "$wifi_tgz" ]]; then
+        log console " ℹ️   Loading Docker image '$wifi_image' from $wifi_tgz..."
+        if docker load -i "$wifi_tgz"; then
+          log console " ✅  Loaded '$wifi_image'"
+        else
+          log console " ❌  Failed to load '$wifi_image' from $wifi_tgz"
+          (( errors++ )) || :
+        fi
+      else
+        log console " ❌  Docker image '$wifi_image' not found and no archive at $wifi_tgz."
+        log console "     Build it : cd $LAB_DIR/conf && make build-wifi-module"
+        log console "     Or load  : cd $LAB_DIR/conf && make load-wifi-module"
+        (( errors++ )) || :
+      fi
+    fi
+  fi
+
+  if [[ $errors -gt 0 ]]; then
+    log console ""
+    log console " 🚫  Pre-flight checks failed ($errors issue(s) listed above)."
+    log console "     NFR is non-intrusive and will not modify your system automatically."
+    log console "     Resolve the conflicts above and try again."
+    exit 1
+  fi
+}
+
+
 # Generate a fake flag
 generate_flag() {
   local service="$1"
@@ -675,23 +916,66 @@ usage() {
 
 $APP_SHORT v$VERSION by Lee 'MadHat' Heath <lheath@unspecific.com>
 
-Sets up a containerized lab network for offensive security testing.
-Each session is unique (IP, hostnames, services, flags), with optional TLS.
+Spins up a randomized, containerized lab network for Nmap and recon training.
+Each session gets a unique /24 subnet, random IPs, randomized hostnames,
+randomized credentials, and optional TLS — so no two sessions are the same.
+A browser-based dashboard with scoring and a live leaderboard is included.
 
 Usage: $0 [options]
 
-Options:
-  -n <number>    Number of targets to launch (default: $NUM_SERVICES)
-  -d             Dry run (don't actually start containers)
-  -i <session>   Replay an existing session by ID
-  -t             Skip TLS/SSL cert generation and encrypted ports
+━━━ Session Options ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  -n <number>    Number of target containers to launch (default: $NUM_SERVICES)
+  -d             Dry run: generate config but do not start containers
+  -i <session>   Replay an existing session by ID (reuse IPs, creds, flags)
+  -t             Skip TLS/SSL cert generation (no encrypted ports)
   -p             Skip plain-text (unencrypted) protocols
-  -s <service>   Launch only the named service (use -l to list)
-  -W             Launch a VPN container (L2TP/IPSec + PSK)
-  -E <ip>        Public endpoint IP for VPN clients (auto-detected by default)
+  -s <service>   Launch only the named service (use -l to list available)
+
+━━━ Access Modes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  (default: solo — single user on the host machine, no external access)
+
+  -M             Multi-user: expose WebUI on LAN IP, print routing instructions
+                   Participants add a static route to reach the lab network.
+                   ⚠️  No encryption — use -N or -A for safer multi-user access.
+
+  -N             Network VPN: add IKEv2 VPN (implies -M)
+                   Participants connect via IKEv2 VPN from the LAN.
+                   Requires: net.ipv4.ip_forward=1, UDP 500/4500 free on LAN IP.
+
+  -A [iface]     WiFi AP: start a WPA2 AP + IKEv2 VPN (implies -M -N)
+                   Participants connect to the WiFi AP, get VPN creds from the
+                   landing page at 10.13.37.1, then VPN into the lab.
+                   Specify iface explicitly or omit to auto-detect.
+                   Requires: USB WiFi adapter with AP support, iw installed,
+                             net.ipv4.ip_forward=1, UDP 500/4500 free.
+
+  -K <pass>      Override WiFi password (only valid with -A)
+                   Must be 8–63 printable ASCII characters.
+                   Default: random pick from vpasswds.conf.
+
+━━━ Utility ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
+
+━━━ Requirements ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  All modes   : Docker + docker compose, unspecific/victim-v1-tiny image
+  -N or -A    : unspecific/fr-wifi-module image, net.ipv4.ip_forward=1
+  -A          : USB WiFi adapter (AP-capable), iw
+
+━━━ Examples ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  launch_lab                  Solo session, 5 targets
+  launch_lab -n 10            Solo session, 10 targets
+  launch_lab -M               Multi-user LAN, routing hints printed at launch
+  launch_lab -M -N            Multi-user LAN + IKEv2 VPN
+  launch_lab -A               WiFi CTF, auto-detect adapter
+  launch_lab -A wlan1         WiFi CTF, use wlan1
+  launch_lab -A wlan1 -K s3cr3t  WiFi CTF with custom password
+  launch_lab -i <session_id>  Replay a previous session exactly
 
 EOF
 }
@@ -747,12 +1031,39 @@ list_services_only=false
 single_service=""
 REPLAY_SESSION_ID=""
 NUM_SERVICES=5
+multi_user=false
 launch_vpn=false
-VPN_ENDPOINT=""
+launch_ap=false
+AP_IFACE=""
+AP_PASS=""
+LAN_IP=""
+VPN_PSK=""
+
+# ─── Pre-process -A [iface] — getopts cannot handle optional arguments ────────
+# Scan for -A, capture the optional interface argument, then remove both from $@
+# so that getopts can handle the remaining flags normally.
+_new_args=()
+_i=1
+while [[ $_i -le $# ]]; do
+  if [[ "${!_i}" == "-A" ]]; then
+    launch_ap=true
+    _next=$(( _i + 1 ))
+    _next_arg="${!_next:-}"
+    if [[ -n "$_next_arg" && ! "$_next_arg" =~ ^- ]]; then
+      AP_IFACE="$_next_arg"
+      (( _i++ )) || :   # skip the interface arg too
+    fi
+  else
+    _new_args+=("${!_i}")
+  fi
+  (( _i++ )) || :
+done
+set -- "${_new_args[@]+"${_new_args[@]}"}"
+unset _new_args _i _next _next_arg
 
 # ─── Parse Options ────────────────────────────────────────────────────────────
 # the leading ':' means we handle missing-arg errors in the case ':'
-while getopts ":n:di:pts:lVhWE:" opt; do
+while getopts ":n:di:pts:lVhMNK:" opt; do
   case "$opt" in
     n)  NUM_SERVICES="$OPTARG" ;;
     d)  dry_run=true ;;
@@ -760,15 +1071,39 @@ while getopts ":n:di:pts:lVhWE:" opt; do
     t)  skip_tls=true ;;
     p)  skip_plain=true ;;
     s)  single_service="$OPTARG" ;;
+    M)  multi_user=true ;;
+    N)  launch_vpn=true ;;
+    K)  AP_PASS="$OPTARG" ;;
     l)  list_services_only=true ;;
-    W)  launch_vpn=true ;;
-    E)  VPN_ENDPOINT="$OPTARG" ;;
     V)  echo "$APP_SHORT v$VERSION"; exit 0 ;;
     h)  usage; exit 0 ;;
     :)  echo "❌ Option -$OPTARG requires an argument." >&2; usage; exit 1 ;;
     \?) echo "❌ Invalid option: -$OPTARG" >&2; usage; exit 1 ;;
   esac
 done
+
+# ─── Flag implication logic ───────────────────────────────────────────────────
+# -A forces -M and -N; -N implies -M
+[[ "$launch_ap"  == true ]] && { launch_vpn=true; multi_user=true; }
+[[ "$launch_vpn" == true ]] && multi_user=true
+
+# ─── Validate -K passphrase if provided ──────────────────────────────────────
+if [[ -n "$AP_PASS" ]]; then
+  if [[ ${#AP_PASS} -lt 8 || ${#AP_PASS} -gt 63 ]]; then
+    echo "❌ -K passphrase must be 8–63 characters (got ${#AP_PASS})." >&2
+    exit 1
+  fi
+  if [[ "$AP_PASS" =~ [^[:print:]] ]]; then
+    echo "❌ -K passphrase contains non-printable characters." >&2
+    exit 1
+  fi
+fi
+
+# ─── -K requires -A ──────────────────────────────────────────────────────────
+if [[ -n "$AP_PASS" && "$launch_ap" != true ]]; then
+  echo "❌ -K is only valid with -A (WiFi AP mode)." >&2
+  usage; exit 1
+fi
 
 shift $((OPTIND -1))
 
@@ -838,6 +1173,7 @@ load_emulated_services
 # Otherwise we move forward
 # Verify dependencies
 check_dependencies
+preflight_checks
 
 
 # ─── Create session directory structure ─────────────────────────────────────
@@ -941,30 +1277,26 @@ else
   log silent " ⚠️  TLS setup skipped (--no-tls enabled)"
 fi
 
-# ─── VPN Setup ────────────────────────────────────────────────────────────────
-VPN_PSK="" VPN_USER="" VPN_PASS=""
+# ─── WiFi AP password ────────────────────────────────────────────────────────
+if [[ "$launch_ap" == true && -z "$AP_PASS" ]]; then
+  AP_PASS=$(_pick_random_entry "$LAB_DIR/conf/dicts/vpasswds.conf")
+  [[ -z "$AP_PASS" ]] && AP_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9' | head -c12)
+  log silent "✔ Generated WiFi password"
+fi
+
+# ─── VPN credentials ─────────────────────────────────────────────────────────
 if [[ "$launch_vpn" == true ]]; then
-  # Auto-detect endpoint if not specified
-  if [[ -z "$VPN_ENDPOINT" ]]; then
-    VPN_ENDPOINT=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/{print $7; exit}')
-    VPN_ENDPOINT="${VPN_ENDPOINT:-127.0.0.1}"
-  fi
-  # Check /dev/ppp exists; create it if not
-  if [[ ! -c /dev/ppp ]]; then
-    log console " ⚠️  /dev/ppp not found — creating it (required for VPN container)"
-    mknod /dev/ppp c 108 0 || log console " ❌  Failed to create /dev/ppp — VPN container may not start"
-  fi
   VPN_PSK=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)
-  VPN_USER="vpn$(openssl rand -hex 3)"
-  VPN_PASS=$(openssl rand -base64 18 | tr -dc 'A-Za-z0-9' | head -c 16)
+  vpn_endpoint="${LAN_IP}"
+  [[ "$launch_ap" == true ]] && vpn_endpoint="10.13.37.1"
+
   cat > "$SESSION_DIR/vpn.txt" <<VPNEOF
-endpoint=$VPN_ENDPOINT
-psk=$VPN_PSK
-username=$VPN_USER
-password=$VPN_PASS
-network=$SUBNET.0/24
+endpoint=${vpn_endpoint}
+psk=${VPN_PSK}
+network=${SUBNET}.0/24
+client_pool=10.99.0.0/24
 VPNEOF
-  log console " 🔒  VPN credentials generated (endpoint: $VPN_ENDPOINT)"
+  log silent "✔ Generated VPN credentials (endpoint: ${vpn_endpoint})"
 fi
 
 # ─── Subnet Announcement ────────────────────────────────────────────────────
@@ -1086,8 +1418,15 @@ cat >> "$compose_file" <<EOF
       - "53/udp"
       - "514/tcp"
       - "53/tcp"
-      - "80/tcp"
-      - "443/tcp"
+      - "443/tcp"$(
+        if [[ "$multi_user" == false || "$launch_ap" == true ]]; then
+          printf "\n      - \"80/tcp\""
+        fi
+      )$(
+        if [[ "$multi_user" == true && "$launch_ap" == false ]]; then
+          printf "\n    ports:\n      - \"%s:80:80\"" "$LAN_IP"
+        fi
+      )
     command: sh -c "/opt/target/launch_target.sh; /bin/bash"
     restart: unless-stopped
 
@@ -1208,41 +1547,62 @@ EOF
 
 done
 
-# ─── VPN Container ────────────────────────────────────────────────────────────
-if [[ "$launch_vpn" == true ]]; then
-  vpn_container_name="vpn_${SESSION_ID}"
-  cat >> "$compose_file" <<EOF
-  vpn:
-    image: hwdsl2/ipsec-vpn-server
-    container_name: ${vpn_container_name}
-    networks:
-      ${NETWORK}:
-        ipv4_address: ${SUBNET}.1
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    devices:
-      - /dev/ppp
-    sysctls:
-      - net.ipv4.ip_forward=1
-      - net.ipv4.conf.all.accept_redirects=0
-      - net.ipv4.conf.all.send_redirects=0
-      - net.ipv4.conf.all.rp_filter=0
-      - net.ipv4.conf.default.accept_redirects=0
-      - net.ipv4.conf.default.send_redirects=0
-      - net.ipv4.conf.default.rp_filter=0
+# ─── WiFi Module Container ────────────────────────────────────────────────────
+if [[ "$launch_vpn" == true || "$launch_ap" == true ]]; then
+  wifi_container_name="wifi_module_${SESSION_ID}"
+
+  if [[ "$launch_ap" == true ]]; then
+    # AP mode: host networking + privileged (hostapd needs raw socket access)
+    cat >> "$compose_file" <<EOF
+  fr-wifi-module:
+    image: unspecific/fr-wifi-module:1.0
+    container_name: ${wifi_container_name}
+    network_mode: host
+    privileged: true
     environment:
-      - VPN_IPSEC_PSK=${VPN_PSK}
-      - VPN_USER=${VPN_USER}
-      - VPN_PASSWORD=${VPN_PASS}
-    ports:
-      - "500:500/udp"
-      - "4500:4500/udp"
+      - AP_ENABLED=true
+      - VPN_ENABLED=true
+      - AP_IFACE=${AP_IFACE}
+      - AP_SSID=nfr-lab
+      - AP_PASS=${AP_PASS}
+      - AP_IP=10.13.37.1
+      - AP_CHANNEL=6
+      - VPN_ENDPOINT=10.13.37.1
+      - VPN_PSK=${VPN_PSK}
+      - VPN_SUBNET=${SUBNET}.0/24
+      - VPN_CLIENT_POOL=10.99.0.0/24
+      - VPN_DNS=${SUBNET}.2
     restart: unless-stopped
 
 EOF
-  echo "$vpn_container_name" >> "$services_map"
-  log silent "✔ Added VPN container ($vpn_container_name) to Compose"
+  else
+    # VPN-only mode: standard Docker network, ports bound to LAN IP only
+    cat >> "$compose_file" <<EOF
+  fr-wifi-module:
+    image: unspecific/fr-wifi-module:1.0
+    container_name: ${wifi_container_name}
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "${LAN_IP}:500:500/udp"
+      - "${LAN_IP}:4500:4500/udp"
+    networks:
+      ${NETWORK}:
+    environment:
+      - AP_ENABLED=false
+      - VPN_ENABLED=true
+      - VPN_ENDPOINT=${LAN_IP}
+      - VPN_PSK=${VPN_PSK}
+      - VPN_SUBNET=${SUBNET}.0/24
+      - VPN_CLIENT_POOL=10.99.0.0/24
+      - VPN_DNS=${SUBNET}.2
+    restart: unless-stopped
+
+EOF
+  fi
+
+  echo "$wifi_container_name" >> "$services_map"
+  log silent "✔ Added fr-wifi-module container ($wifi_container_name) to Compose"
 fi
 
 # ─── Append network section ────────────────────────────────────────────────
@@ -1312,20 +1672,42 @@ log console "  try adding --dns-servers $SUBNET.2 for nme resolution."
 log console "         or visit http://console.nfr.lab/"
 echo
 
-# ─── VPN connection info ────────────────────────────────────────────────────
+# ─── Mode-specific access info ────────────────────────────────────────────────
+if [[ "$launch_ap" == true ]]; then
+  log console " 📡  WiFi AP active"
+  log console "     SSID     : nfr-lab"
+  log console "     Password : $AP_PASS"
+  log console "     Connect to WiFi, then visit http://10.13.37.1/ for VPN setup"
+  echo
+fi
+
 if [[ "$launch_vpn" == true ]]; then
-  log console " 🔒  VPN Access (L2TP/IPSec + PSK)"
-  log console "    Endpoint : $VPN_ENDPOINT"
-  log console "    PSK      : $VPN_PSK"
-  log console "    Username : $VPN_USER"
-  log console "    Password : $VPN_PASS"
-  log console "    Network  : $SUBNET.0/24"
+  log console " 🔒  IKEv2 VPN Access"
+  log console "     Endpoint  : ${vpn_endpoint}"
+  log console "     PSK       : $VPN_PSK"
+  log console "     Lab net   : ${SUBNET}.0/24"
+  log console "     Client IPs: 10.99.0.0/24"
   log console ""
-  log console "  Windows : Settings → VPN → Add → L2TP/IPSec with PSK"
-  log console "  macOS   : System Settings → VPN → Add → L2TP over IPSec"
-  log console "  Linux   : nmcli con add type vpn vpn-type l2tp ..."
-  log console "  Mobile  : Built-in VPN → L2TP (iOS/Android)"
-  log console "         or visit http://console.nfr.lab/vpn.html"
+  log console "  Windows : Settings → VPN → Add → IKEv2 · Auth: Pre-shared key"
+  log console "  macOS   : System Settings → VPN → Add → IKEv2 · Shared Secret"
+  log console "  Linux   : sudo ipsec up nfr-vpn"
+  log console "  iOS     : Settings → VPN → Add → IKEv2"
+  log console "  Android : Settings → VPN → IKEv2/IPSec PSK"
+  echo
+fi
+
+if [[ "$multi_user" == true && "$launch_ap" == false ]]; then
+  log console " 🌐  Multi-user mode: WebUI is accessible on your LAN"
+  log console "     URL      : http://${LAN_IP}/"
+  log console ""
+  log console " 📡  Routing instructions for LAN participants:"
+  log console "     Linux/macOS : sudo ip route add ${SUBNET}.0/24 via ${LAN_IP}"
+  log console "     Windows     : route add ${SUBNET}.0 mask 255.255.255.0 ${LAN_IP}"
+  log console ""
+  if [[ "$launch_vpn" == false ]]; then
+    log console " ⚠️   Running -M without -N gives unencrypted lab access."
+    log console "     Consider -N (VPN) or -A (WiFi AP) for safer multi-user access."
+  fi
   echo
 fi
 

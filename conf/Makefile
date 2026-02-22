@@ -3,6 +3,7 @@ V1_TINY=unspecific/victim-v1-tiny:1.4
 V1_LARGE=unspecific/victim-v1-large:1.01
 V2_SMGUI=unspecific/victim-v2-smgui:1.2
 V2_GUI=unspecific/victim-v2-gui:1.01
+WIFI_MODULE=unspecific/fr-wifi-module:1.0
 
 TS=$(shell date +%Y%m%d_%H%M)
 
@@ -20,7 +21,10 @@ build-v2-gui:
 build-v2-smgui:
 	docker build -f victim-v2-alpine.dockerfile -t $(V2_GUI) .
 
-build-all: build-v1-tiny build-v1-large build-v2-gui build-v2-smgui
+build-wifi-module:
+	docker build -f wifi-module.dockerfile -t $(WIFI_MODULE) .
+
+build-all: build-v1-tiny build-v1-large build-v2-gui build-v2-smgui build-wifi-module
 
 
 # ───── Package/Export ─────
@@ -37,7 +41,10 @@ package-v2-gui:
 package-v2-smgui:
 	docker save $(V2_SMGUI) | gzip > victim-v2-smgui-$(TS).tar.gz
 
-package-all: package-v1-tiny package-v1-large package-v2-gui package-v2-smgui
+package-wifi-module:
+	docker save $(WIFI_MODULE) | gzip > fr-wifi-module-$(TS).tar.gz
+
+package-all: package-v1-tiny package-v1-large package-v2-gui package-v2-smgui package-wifi-module
 
 
 # ───── Load ─────
@@ -54,7 +61,10 @@ load-v2-gui:
 load-v2-smgui:
 	gunzip -c victim-v2-smgui-*.tar.gz | docker load
 
-load-all: load-v1-tiny load-v1-large load-v2-gui load-v2-smgui
+load-wifi-module:
+	gunzip -c fr-wifi-module-*.tar.gz | docker load
+
+load-all: load-v1-tiny load-v1-large load-v2-gui load-v2-smgui load-wifi-module
 
 
 # ───── Push ─────
@@ -69,11 +79,11 @@ push:
 # ───── Clean ─────
 
 clean:
-	rm -f victim-v1-tiny-*.tar.gz victim-v1-large-*.tar.gz victim-v2-gui-*.tar.gz victim-v2-smgui-*.tar.gz
+	rm -f victim-v1-tiny-*.tar.gz victim-v1-large-*.tar.gz victim-v2-gui-*.tar.gz victim-v2-smgui-*.tar.gz fr-wifi-module-*.tar.gz
 	docker image prune
 
 clean-images:
-	docker rmi -f $(V1_TINY) $(V1_LARGE) $(V2_GUI) $(V2_SMGUI) || true
+	docker rmi -f $(V1_TINY) $(V1_LARGE) $(V2_GUI) $(V2_SMGUI) $(WIFI_MODULE) || true
 	docker image prune
 
 clean-all: clean clean-images
@@ -83,7 +93,7 @@ clean-all: clean clean-images
 
 status:
 	@echo "🧱 Checking Docker images:"
-	@docker images | grep -E 'victim-v1-|victim-v2-' || echo "No victim images found."
+	@docker images | grep -E 'victim-v1-|victim-v2-|fr-wifi-module' || echo "No NFR images found."
 
 
 # ───── Help ─────
@@ -95,13 +105,15 @@ help:
 	@echo "  make build-v1-large      Build Debian-based victim image"
 	@echo "  make build-v2-gui        Build Debian desktop GUI victim image"
 	@echo "  make build-v2-smgui      Build Alpine desktop GUI victim image"
-	@echo "  make build-all           Build all victim images"
+	@echo "  make build-wifi-module   Build WiFi AP + IKEv2 VPN module image"
+	@echo "  make build-all           Build all images"
 	@echo
 	@echo "Package Targets:"
 	@echo "  make package-v1-tiny     Export + gzip v1-tiny image"
 	@echo "  make package-v1-large    Export + gzip v1-large image"
 	@echo "  make package-v2-gui      Export + gzip v2-gui image"
 	@echo "  make package-v2-smgui    Export + gzip v2-smgui image"
+	@echo "  make package-wifi-module Export + gzip wifi-module image"
 	@echo "  make package-all         Package all images"
 	@echo
 	@echo "Load Targets:"
@@ -109,6 +121,7 @@ help:
 	@echo "  make load-v1-large       Load v1-large image from .tar.gz"
 	@echo "  make load-v2-gui         Load v2-gui image from .tar.gz"
 	@echo "  make load-v2-smgui       Load v2-smgui image from .tar.gz"
+	@echo "  make load-wifi-module    Load wifi-module image from .tar.gz"
 	@echo "  make load-all            Load all images"
 	@echo
 	@echo "Push Target:"
@@ -127,4 +140,6 @@ help:
 .PHONY: \
 	build-* package-* load-* push \
 	clean clean-images clean-all status \
-	build-all package-all load-all help
+	build-all package-all load-all \
+	build-wifi-module package-wifi-module load-wifi-module \
+	help
