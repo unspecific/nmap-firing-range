@@ -362,6 +362,59 @@ install_target() {
   log console " ✅  Target services installed to $TARGET_DIR"
 }
 
+# ─── Docker image check & build ──────────────────────────────────────────────
+# Images required by the lab and the Makefile target to build each one.
+# Format: "image:tag|make-target"
+NFR_IMAGES=(
+  "unspecific/victim-v1-tiny:1.4|build-v1-tiny"
+  "unspecific/fr-wifi-module:1.0|build-wifi-module"
+)
+
+setup_docker_images() {
+  local missing=()
+  for entry in "${NFR_IMAGES[@]}"; do
+    local img="${entry%%|*}"
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+      missing+=("$entry")
+    fi
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    log console " ✅  Docker images: all present."
+    return
+  fi
+
+  log console " 🐳  Missing Docker images:"
+  for entry in "${missing[@]}"; do
+    log console "      ${entry%%|*}"
+  done
+
+  local do_build=false
+  if [[ "$UNATTENDED" == true ]]; then
+    do_build=true
+  else
+    read -rp " 🐳  Build missing images now? (y/n): " _resp
+    [[ "$_resp" =~ ^[Yy]$ ]] && do_build=true
+  fi
+
+  if [[ "$do_build" == true ]]; then
+    for entry in "${missing[@]}"; do
+      local img="${entry%%|*}"
+      local target="${entry##*|}"
+      log console " 🔨  Building $img…"
+      if make -C "$CONF_DIR" "$target"; then
+        log console " ✅  Built $img"
+      else
+        log console " ❌  Failed to build $img"
+        log console "     Retry manually: cd $CONF_DIR && make $target"
+      fi
+    done
+  else
+    log console " ℹ️  Skipping image build. Run when ready:"
+    log console "     cd $CONF_DIR && make build-all"
+  fi
+}
+
 # ─── Creating the NFR_GROUP and preparing LABDIR ──────────────────────────
 setup_group_access() {
   log console " 👥  Configuring group access and permissions…"
@@ -735,6 +788,7 @@ install_target
 log console " 📁  Target configs installed to: $TARGET_DIR"
 setup_group_access
 create_symlinks "$@"
+setup_docker_images
 
 log console " ✅  Firing Range setup completed successfully."
 log console " 📝  Setup log saved at: $LOGFILE"
@@ -747,5 +801,9 @@ find "$INSTALL_DIR" -type f -exec chmod 664 {} +
 find "$INSTALL_DIR/bin" "$INSTALL_DIR/target/services" -type f -name "*.sh" -exec chmod 775 {} +
 find "$INSTALL_DIR/conf" "$INSTALL_DIR/target/conf" -type f -name "*.cgi" -exec chmod 775 {} +
 chmod 664 $LOGFILE
-log console " ✅  Setup complete. You can now run 'launch_lab' or 'cleanup_lab'."
+echo
+log console " 🎉  All done! Next steps:"
+log console "      launch_lab        Start a local lab (5 random targets, default)"
+log console "      launch_lab -h     See all options (access modes, TLS, replay, etc.)"
+log console "      cleanup_lab       Tear down and clean up when you're done"
 echo
