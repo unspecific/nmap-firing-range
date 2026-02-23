@@ -24,7 +24,6 @@ VERSION="2.2.9"
 
 THRD_OCT=$(shuf -i2-254 -n1)
 SUBNET="192.168.$THRD_OCT"
-USED_IPS=()
 NUM_SERVICES=5
 SESSION_ID=$(openssl rand -hex 4)
 NCPORT=$(shuf -i1024-4999 -n1)
@@ -607,8 +606,8 @@ get_unique_hostname() {
     local noun=${nouns[RANDOM % ${#nouns[@]}]}
     local name="${adj}-${noun}"
 
-    if [[ -z "${USED_HOSTNAMES[$name]}" ]]; then
-      USED_HOSTNAMES["$name"]=1
+    if ! grep -qxF "$name" "$_USED_HOSTNAMES_FILE" 2>/dev/null; then
+      echo "$name" >> "$_USED_HOSTNAMES_FILE"
       local fqdn="${name}${DOMAIN}"
       log silent "Chose hostname: $fqdn"
       echo "$fqdn"
@@ -635,9 +634,8 @@ get_random_ip() {
   for ((i=1; i<=max_attempts; i++)); do
     last_octet=$(shuf -i130-250 -n1)
     ip="${SUBNET}.${last_octet}"
-    # check for membership in USED_IPS
-    if ! printf '%s\n' "${USED_IPS[@]}" | grep -qx "${ip}"; then
-      USED_IPS+=("$ip")
+    if ! grep -qxF "$ip" "$_USED_IPS_FILE" 2>/dev/null; then
+      echo "$ip" >> "$_USED_IPS_FILE"
       log silent "Chose IP: $ip"
       echo "$ip"
       return 0
@@ -1154,7 +1152,10 @@ CA_DIR="$SESSION_DIR/$CONF_DIR/$CERT_DIR"
 SYSLOG_FILE="$SESSION_DIR/$LOG_DIR/containers"
 DNSMASQ_CONF="$SESSION_DIR/$CONF_DIR/console/dnsmasq.conf"
 HOSTS="/etc/hosts"
-declare -gA USED_HOSTNAMES=()
+# File-based deduplication — survives subshell calls unlike in-memory arrays
+_USED_IPS_FILE="$SESSION_DIR/.used_ips"
+_USED_HOSTNAMES_FILE="$SESSION_DIR/.used_hostnames"
+touch "$_USED_IPS_FILE" "$_USED_HOSTNAMES_FILE"
 
 # 3) Replay mode?
 if [[ -n "$REPLAY_SESSION_ID" ]]; then
