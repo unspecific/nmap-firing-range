@@ -9,9 +9,8 @@ fi
 
 endpoint=$(grep '^endpoint=' "$f" | cut -d= -f2-)
 psk=$(grep '^psk=' "$f" | cut -d= -f2-)
-username=$(grep '^username=' "$f" | cut -d= -f2-)
-password=$(grep '^password=' "$f" | cut -d= -f2-)
 network=$(grep '^network=' "$f" | cut -d= -f2-)
+client_pool=$(grep '^client_pool=' "$f" | cut -d= -f2-)
 
-printf '{"enabled":true,"endpoint":"%s","psk":"%s","username":"%s","password":"%s","network":"%s"}\n' \
-  "$endpoint" "$psk" "$username" "$password" "$network"
+printf '{"enabled":true,"endpoint":"%s","psk":"%s","network":"%s","client_pool":"%s"}\n' \
+  "$endpoint" "$psk" "$network" "$client_pool"

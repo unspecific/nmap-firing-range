@@ -182,6 +182,25 @@
       <h2>&#9632; Connection Instructions</h2>
 
       <div class="os-section">
+        <h3>Linux (strongSwan)</h3>
+        <ol>
+          <li>Install strongSwan if needed: <code>sudo apt install strongswan</code></li>
+          <li>Add to <code>/etc/ipsec.conf</code>:
+            <pre>conn nfr-vpn
+  keyexchange=ikev2
+  right=<span id="linux-endpoint">—</span>
+  rightid=@nfr-vpn
+  rightsubnet=0.0.0.0/0
+  leftsourceip=%config
+  authby=psk
+  auto=start</pre>
+          </li>
+          <li>Add to <code>/etc/ipsec.secrets</code>: <code>: PSK "<span id="linux-psk-inline">—</span>"</code></li>
+          <li>Connect: <code>sudo ipsec up nfr-vpn</code></li>
+        </ol>
+      </div>
+
+      <div class="os-section">
         <h3>Windows</h3>
         <ol>
           <li>Open <strong>Settings → Network &amp; Internet → VPN</strong></li>
@@ -189,9 +208,9 @@
           <li>VPN provider: <code>Windows (built-in)</code></li>
           <li>Connection name: <code>NFR Lab</code></li>
           <li>Server name or address: <code id="win-endpoint">—</code></li>
-          <li>VPN type: <code>L2TP/IPsec with pre-shared key</code></li>
+          <li>VPN type: <code>IKEv2</code></li>
+          <li>Type of sign-in info: <code>Pre-shared key</code></li>
           <li>Pre-shared key: <code id="win-psk">—</code></li>
-          <li>Username / Password: as shown above</li>
           <li>Save, then click <strong>Connect</strong></li>
         </ol>
       </div>
@@ -200,35 +219,34 @@
         <h3>macOS</h3>
         <ol>
           <li>Open <strong>System Settings → VPN</strong></li>
-          <li>Click <strong>Add VPN Configuration → L2TP over IPSec</strong></li>
+          <li>Click <strong>Add VPN Configuration → IKEv2</strong></li>
           <li>Display name: <code>NFR Lab</code></li>
           <li>Server address: <code id="mac-endpoint">—</code></li>
-          <li>Account name: <code id="mac-user">—</code></li>
-          <li>Click <strong>Authentication Settings</strong> → enter Password and Shared Secret (PSK)</li>
+          <li>Remote ID: <code>nfr-vpn</code></li>
+          <li>Authentication: <strong>None</strong> · click <strong>Authentication Settings</strong> → Shared Secret → paste PSK</li>
           <li>Connect</li>
         </ol>
       </div>
 
       <div class="os-section">
-        <h3>Linux (NetworkManager)</h3>
+        <h3>iOS</h3>
         <ol>
-          <li>Install the L2TP plugin if needed: <code>sudo apt install network-manager-l2tp-gnome</code></li>
-          <li>Open <strong>Network Settings → VPN → Add → Layer 2 Tunneling Protocol (L2TP)</strong></li>
-          <li>Gateway: <code id="linux-endpoint">—</code></li>
-          <li>Username / Password: as shown above</li>
-          <li>Click <strong>IPsec Settings</strong> → enable, enter Pre-shared key</li>
-          <li>Or via CLI:
-            <code>nmcli con add type vpn vpn-type l2tp con-name NFR-Lab ifname -- vpn.data "gateway=<span id="linux-ep-inline">—</span>,ipsec-enabled=yes,ipsec-psk=<span id="linux-psk-inline">—</span>,user=<span id="linux-user-inline">—</span>" vpn.secrets "password=<span id="linux-pass-inline">—</span>"</code>
-          </li>
+          <li>Settings → General → VPN &amp; Device Management → VPN → Add VPN Configuration</li>
+          <li>Type: <code>IKEv2</code></li>
+          <li>Server: <code id="ios-endpoint">—</code> · Remote ID: <code>nfr-vpn</code></li>
+          <li>Authentication: <strong>None</strong> · Secret: paste PSK</li>
+          <li>Save, then toggle VPN on</li>
         </ol>
       </div>
 
       <div class="os-section">
-        <h3>iOS / Android</h3>
+        <h3>Android</h3>
         <ol>
-          <li><strong>iOS</strong>: Settings → General → VPN &amp; Device Management → VPN → Add VPN Configuration → Type: L2TP</li>
-          <li><strong>Android</strong>: Settings → Network → VPN → Add VPN → Type: L2TP/IPSec PSK</li>
-          <li>Server: <code id="mob-endpoint">—</code>, Account / Password, Secret (PSK): as shown above</li>
+          <li>Settings → Network &amp; internet → VPN → Add VPN</li>
+          <li>Type: <code>IKEv2/IPSec PSK</code></li>
+          <li>Server: <code id="android-endpoint">—</code></li>
+          <li>IPSec pre-shared key: paste PSK</li>
+          <li>Save, then connect</li>
         </ol>
       </div>
 
@@ -254,13 +272,11 @@
           <table class="cred-table">
             <tr><td>Endpoint</td><td><span id="v-ep">${data.endpoint}</span>${copyBtn('v-ep')}</td></tr>
             <tr><td>PSK</td><td><span id="v-psk">${data.psk}</span>${copyBtn('v-psk')}</td></tr>
-            <tr><td>Username</td><td><span id="v-user">${data.username}</span>${copyBtn('v-user')}</td></tr>
-            <tr><td>Password</td><td><span id="v-pass">${data.password}</span>${copyBtn('v-pass')}</td></tr>
             <tr><td>Lab Network</td><td><span id="v-net">${data.network}</span></td></tr>
           </table>`;
 
         // populate per-OS instruction placeholders
-        ['win','mac','linux','mob'].forEach(p => {
+        ['win','mac','linux','ios','android'].forEach(p => {
           const el = document.getElementById(p + '-endpoint');
           if (el) el.textContent = data.endpoint;
         });
@@ -268,20 +284,10 @@
           const el = document.getElementById(p + '-psk');
           if (el) el.textContent = data.psk;
         });
-        ['mac'].forEach(p => {
-          const el = document.getElementById(p + '-user');
-          if (el) el.textContent = data.username;
-        });
-        const ids = {
-          'linux-ep-inline': data.endpoint,
-          'linux-psk-inline': data.psk,
-          'linux-user-inline': data.username,
-          'linux-pass-inline': data.password,
-        };
-        for (const [id, val] of Object.entries(ids)) {
+        ['linux-psk-inline'].forEach(id => {
           const el = document.getElementById(id);
-          if (el) el.textContent = val;
-        }
+          if (el) el.textContent = data.psk;
+        });
 
         document.getElementById('instructions-panel').style.display = '';
       })

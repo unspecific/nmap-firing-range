@@ -156,73 +156,12 @@ EOF
   sleep 2
 fi
 
-# ─── Landing page (AP mode only) ──────────────────────────────────────────────
-# In AP mode, WiFi clients reach 10.13.37.1 before they have a VPN tunnel.
-# We serve a minimal page here with the VPN credentials so they can connect.
-# In VPN-only mode (-N), the console's vpn.html already serves this role.
+# ─── Web server (VPN credentials page, AP mode only) ─────────────────────────
+# vpn.html + vpn_info.cgi are volume-mounted into /opt/wifi-module/web at launch.
+# In VPN-only mode (-N), the console container serves vpn.html on the LAN instead.
 if [[ "$AP_ENABLED" == "true" ]]; then
-  log "Generating landing page for ${AP_IP}..."
-
-  cat > /opt/wifi-module/web/index.html <<HTMLEOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NFR Lab — VPN Access</title>
-  <style>
-    body  { font-family: monospace; background:#1a1a1a; color:#e0e0e0;
-            max-width:700px; margin:40px auto; padding:20px; }
-    h1    { color:#ff6600; margin-bottom:4px; }
-    h2    { color:#ff9900; font-size:.9em; text-transform:uppercase;
-            letter-spacing:1px; margin-top:28px; }
-    .cred { background:#2a2a2a; border-left:4px solid #ff6600;
-            padding:10px 16px; margin:8px 0; }
-    .cred span { color:#ffcc00; font-weight:bold; }
-    pre   { background:#2a2a2a; padding:10px 14px; overflow-x:auto;
-            border-radius:3px; }
-    a     { color:#ff6600; }
-    p     { line-height:1.6; }
-  </style>
-</head>
-<body>
-  <h1>🔥 Nmap Firing Range</h1>
-  <p>Connect via IKEv2 VPN to reach the lab network, then scan away.</p>
-
-  <h2>VPN Credentials</h2>
-  <div class="cred">Endpoint (server): <span>${VPN_ENDPOINT}</span></div>
-  <div class="cred">Pre-Shared Key:    <span>${VPN_PSK}</span></div>
-  <div class="cred">Lab Network:       <span>${VPN_SUBNET}</span></div>
-
-  <h2>Connect — Linux</h2>
-  <pre>sudo ipsec up nfr-vpn</pre>
-
-  <h2>Connect — Windows</h2>
-  <p>Settings → Network &amp; Internet → VPN → Add a VPN connection<br>
-  VPN type: <b>IKEv2</b> · Server: <b>${VPN_ENDPOINT}</b><br>
-  Sign-in info: <b>Pre-shared key</b> → paste the key above</p>
-
-  <h2>Connect — macOS</h2>
-  <p>System Settings → VPN → Add VPN Configuration → IKEv2<br>
-  Server: <b>${VPN_ENDPOINT}</b> · Authentication: <b>Shared Secret</b></p>
-
-  <h2>Connect — iOS</h2>
-  <p>Settings → VPN → Add VPN Configuration → IKEv2<br>
-  Server: <b>${VPN_ENDPOINT}</b> · Remote ID: <b>nfr-vpn</b></p>
-
-  <h2>Connect — Android</h2>
-  <p>Settings → VPN → Add VPN → IKEv2/IPSec PSK<br>
-  Server: <b>${VPN_ENDPOINT}</b> · Pre-shared key: paste above</p>
-
-  <h2>After connecting</h2>
-  <p>Visit the lab dashboard: <a href="http://console.nfr.lab/">http://console.nfr.lab/</a></p>
-  <p>Start scanning: <code>nmap -v ${VPN_SUBNET}</code></p>
-</body>
-</html>
-HTMLEOF
-
-  log "Starting thttpd (landing page on ${AP_IP}:80)..."
-  thttpd -h "${AP_IP}" -p 80 -dd /opt/wifi-module/web -D &
+  log "Starting thttpd (VPN page on ${AP_IP}:80)..."
+  thttpd -h "${AP_IP}" -p 80 -d /opt/wifi-module/web -c '/cgi-bin/*' -D &
 fi
 
 log "✅ wifi-module ready"

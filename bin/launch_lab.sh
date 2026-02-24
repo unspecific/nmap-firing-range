@@ -1592,6 +1592,10 @@ if [[ "$launch_vpn" == true || "$launch_ap" == true ]]; then
       - VPN_SUBNET=${SUBNET}.0/24
       - VPN_CLIENT_POOL=10.99.0.0/24
       - VPN_DNS=${SUBNET}.2
+    volumes:
+      - ${LAB_DIR}/conf/web_score_card/vpn.html:/opt/wifi-module/web/index.html:ro
+      - ${LAB_DIR}/conf/web_score_card/cgi-bin/vpn_info.cgi:/opt/wifi-module/web/cgi-bin/vpn_info.cgi:ro
+      - ${SESSION_DIR}/vpn.txt:/etc/vpn.txt:ro
     restart: unless-stopped
 
 EOF
@@ -1665,8 +1669,13 @@ else
 fi
 
 # ─── Launch containers ─────────────────────────────────────────────────────
-if ! $COMPOSE_CMD -f "$compose_file" up -d; then
-  log console "❌  Failed to launch the containers"
+if ! $COMPOSE_CMD -f "$compose_file" create >/dev/null 2>&1; then
+  log console "❌  Failed to create the containers"
+  exit 1
+fi
+
+if ! $COMPOSE_CMD -f "$compose_file" start >/dev/null 2>&1; then
+  log console "❌  Failed to start the containers"
   exit 1
 fi
 

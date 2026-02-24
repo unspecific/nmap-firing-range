@@ -179,23 +179,66 @@ $ launch_lab -h
 
 NFR Launcher v2.2.9 by Lee 'MadHat' Heath <lheath@unspecific.com>
 
-Sets up a containerized lab network for offensive security testing.
-Each session is unique (IP, hostnames, services, flags), with optional TLS.
+Spins up a randomized, containerized lab network for Nmap and recon training.
+Each session gets a unique /24 subnet, random IPs, randomized hostnames,
+randomized credentials, and optional TLS — so no two sessions are the same.
+A browser-based dashboard with scoring and a live leaderboard is included.
 
-Usage: /usr/local/sbin/launch_lab [options]
+Usage: launch_lab [options]
 
-Options:
-  -n <number>    Number of targets to launch (default: 5)
-  -d             Dry run (don't actually start containers)
-  -i <session>   Replay an existing session by ID
-  -t             Skip TLS/SSL cert generation and encrypted ports
+━━━ Session Options ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  -n <number>    Number of target containers to launch (default: 5)
+  -d             Dry run: generate config but do not start containers
+  -i <session>   Replay an existing session by ID (reuse IPs, creds, flags)
+  -t             Skip TLS/SSL cert generation (no encrypted ports)
   -p             Skip plain-text (unencrypted) protocols
-  -s <service>   Launch only the named service (use -l to list)
-  -W             Launch a VPN container (L2TP/IPSec + PSK)
-  -E <ip>        Public endpoint IP for VPN clients (auto-detected by default)
+  -s <service>   Launch only the named service (use -l to list available)
+
+━━━ Access Modes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  (default: solo — single user on the host machine, no external access)
+
+  -M             Multi-user: expose WebUI on LAN IP, print routing instructions
+                   Participants add a static route to reach the lab network.
+                   ⚠️  No encryption — use -N or -A for safer multi-user access.
+
+  -N             Network VPN: add IKEv2 VPN (implies -M)
+                   Participants connect via IKEv2 VPN from the LAN.
+                   Requires: net.ipv4.ip_forward=1, UDP 500/4500 free on LAN IP.
+
+  -A [iface]     WiFi AP: start a WPA2 AP + IKEv2 VPN (implies -M -N)
+                   Participants connect to the WiFi AP, get VPN creds from the
+                   landing page at 10.13.37.1, then VPN into the lab.
+                   Specify iface explicitly or omit to auto-detect.
+                   Requires: USB WiFi adapter with AP support, iw installed,
+                             net.ipv4.ip_forward=1, UDP 500/4500 free.
+
+  -K <pass>      Override WiFi password (only valid with -A)
+                   Must be 8–63 printable ASCII characters.
+                   Default: random pick from vpasswds.conf.
+
+━━━ Utility ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
+
+━━━ Requirements ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  All modes   : Docker + docker compose, unspecific/victim-v1-tiny image
+  -N or -A    : unspecific/fr-wifi-module image, net.ipv4.ip_forward=1
+  -A          : USB WiFi adapter (AP-capable), iw
+
+━━━ Examples ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  launch_lab                  Solo session, 5 targets
+  launch_lab -n 10            Solo session, 10 targets
+  launch_lab -M               Multi-user LAN, routing hints printed at launch
+  launch_lab -M -N            Multi-user LAN + IKEv2 VPN
+  launch_lab -A               WiFi CTF, auto-detect adapter
+  launch_lab -A wlan1         WiFi CTF, use wlan1
+  launch_lab -A wlan1 -K s3cr3t  WiFi CTF with custom password
+  launch_lab -i <session_id>  Replay a previous session exactly
 ```
 
 ---
@@ -213,7 +256,7 @@ Once launched, point a browser to `http://console.nfr.lab/` (a `/etc/hosts` entr
 | Leaderboard | `/leaderboard.html` | Live ranked leaderboard for all players |
 | Syslog | `/logger.html` | Real-time container log stream |
 | TCPDump | `/tcpdump.html` | Live network packet capture viewer |
-| VPN Access | `/vpn.html` | VPN credentials and per-OS connection instructions (requires `-W`) |
+| VPN Access | `/vpn.html` | VPN credentials and per-OS IKEv2 connection instructions (requires `-N` or `-A`) |
 
 ```
 $ check_lab -h
@@ -276,13 +319,15 @@ Build Targets:
   make build-v1-large      Build Debian-based victim image
   make build-v2-gui        Build Debian desktop GUI victim image
   make build-v2-smgui      Build Alpine desktop GUI victim image
-  make build-all           Build all victim images
+  make build-wifi-module   Build WiFi AP + IKEv2 VPN module image
+  make build-all           Build all images
 
 Package Targets:
   make package-v1-tiny     Export + gzip v1-tiny image
   make package-v1-large    Export + gzip v1-large image
   make package-v2-gui      Export + gzip v2-gui image
   make package-v2-smgui    Export + gzip v2-smgui image
+  make package-wifi-module Export + gzip wifi-module image
   make package-all         Package all images
 
 Load Targets:
@@ -290,6 +335,7 @@ Load Targets:
   make load-v1-large       Load v1-large image from .tar.gz
   make load-v2-gui         Load v2-gui image from .tar.gz
   make load-v2-smgui       Load v2-smgui image from .tar.gz
+  make load-wifi-module    Load wifi-module image from .tar.gz
   make load-all            Load all images
 
 Push Target:
@@ -306,6 +352,151 @@ Meta:
 ```
 
 To reiterate, ***make push*** is not set up at this time.
+
+> **Note:** `wifi-module-entrypoint.sh` and `wifi-module.dockerfile` are baked into the
+> `unspecific/fr-wifi-module` image. Any changes to those files require a rebuild:
+> `sudo make -C /opt/firing-range/conf build-wifi-module`
+
+---
+
+# Architecture
+
+Understanding the internal design prevents common mistakes when extending or debugging
+the firing range.
+
+## Everything runs inside Docker
+
+**Nothing runs on the host OS except the Docker daemon.** `launch_lab` generates
+configuration files, writes Docker Compose YAML, and starts containers — but all
+actual services (web servers, DNS, VPN, packet capture, emulated targets) run inside
+containers. If something isn't working, look inside the container, not on the host.
+
+## Docker images
+
+| Image | Tag | Role |
+|---|---|---|
+| `unspecific/victim-v1-tiny` | `1.4` | Console container + all victim containers |
+| `unspecific/fr-wifi-module` | `1.0` | WiFi AP + IKEv2 VPN access module |
+
+## Container roles
+
+### Console container (`SUBNET.2`)
+Started in every session. Provides the CTF infrastructure — it is **not** a scan target.
+
+| Service | Purpose |
+|---|---|
+| **dnsmasq** | DNS server for the lab: forward + PTR records for all hosts. DNS only — no DHCP. |
+| **rsyslog** | Central syslog collector — all victim containers forward logs here. |
+| **tcpdump** | Continuous packet capture written to `/opt/target/tcpdump.log`. |
+| **thttpd** | CTF web dashboard served at `console.nfr.lab` (port 80, HTTPS 443 via ncat). |
+
+Web content is volume-mounted from `conf/web_score_card/` into `/opt/web` inside the
+container. Session data (scores, logs, mappings) lives at `/opt/target/`.
+
+The console container is started by setting `SERVICE=console`, which causes
+`launch_target.sh` (running as the container CMD) to call `launch_console()`. This is
+the console's startup path — it has no relation to victim service launching.
+
+### Victim containers (random IPs in the /24)
+Each runs a single emulated service. The `SERVICE` environment variable tells
+`launch_target.sh` which service to start (ssh, smb, snmp, http, etc.).
+
+**`launch_target.sh` is the victim service dispatcher.** It handles: ssh, smb, tftp,
+ftp, http, smtp, snmp, imap, pop, and service emulators. It is not involved in console
+web serving, VPN, or any infrastructure concerns. Changes to `launch_target.sh` do
+**not** require a Docker image rebuild — the script is copied fresh into the session
+directory at launch and mounted into containers.
+
+### fr-wifi-module container (VPN endpoint IP)
+Started only with `-N` (VPN-only) or `-A` (WiFi AP) flags. Uses a separate image with
+its own baked-in entrypoint (`wifi-module-entrypoint.sh`).
+
+| Service | Condition | Purpose |
+|---|---|---|
+| **strongSwan** | always | IKEv2 VPN server; NAT-masquerades VPN client traffic into the lab network |
+| **hostapd** | `-A` only | WPA2 WiFi AP on the specified interface |
+| **dnsmasq** | `-A` only | DHCP for WiFi clients (AP subnet `10.13.37.0/24`) |
+| **thttpd** | `-A` only | VPN credentials landing page at `AP_IP:80` (CGI-enabled) |
+
+The VPN credentials page (`vpn.html` + `vpn_info.cgi`) and session credentials
+(`vpn.txt`) are volume-mounted into the container at launch. `vpn_info.cgi` reads
+`/etc/vpn.txt` at request time and returns JSON — credentials are not baked into the
+image.
+
+In VPN-only mode (`-N`), the console container serves `vpn.html` on the LAN IP instead,
+since players on the LAN can reach it before connecting VPN.
+
+---
+
+# Network Access Workflows
+
+## Solo mode — `launch_lab`
+Default. Lab network is Docker-internal only.
+
+```
+Host browser → http://console.nfr.lab/ (/etc/hosts → 127.0.0.1)
+                        │
+                   Console container (SUBNET.2)
+                        │
+              Lab network 192.168.X.0/24
+                  (victim containers)
+```
+
+## Multi-user mode — `launch_lab -M`
+Console also binds to the host's LAN IP. Players on the same LAN can participate after
+adding a static route.
+
+```
+Player browser → http://console.nfr.lab/   (needs /etc/hosts entry on each machine)
+                        │
+              Host LAN IP (port 80/443)
+                        │
+                   Console container
+                        │
+              Lab network 192.168.X.0/24
+
+Static route required on each player machine:
+  ip route add 192.168.X.0/24 via <HOST_LAN_IP>
+```
+
+> ⚠️ No encryption — lab traffic is visible on the LAN. Use `-N` or `-A` for
+> shared/class environments.
+
+## VPN mode — `launch_lab -M -N`
+Players connect via IKEv2 VPN before accessing the lab. No static route needed.
+
+```
+Player ──→ http://HOST_LAN_IP/vpn.html  ← served by console container (LAN IP bound)
+                        │
+            [reads VPN endpoint + PSK]
+                        │
+Player ──→ IKEv2 VPN  ──→  fr-wifi-module container (HOST_LAN_IP)
+                               │  (NAT MASQUERADE)
+                        Lab network 192.168.X.0/24
+                               │
+Player ──→ http://console.nfr.lab/   (DNS resolves via VPN tunnel)
+```
+
+## WiFi AP mode — `launch_lab -A [iface]`
+Players connect to a dedicated WPA2 AP. The WiFi subnet is isolated — without VPN, they
+can only reach the landing page.
+
+```
+Player ──→ connects to WiFi SSID (nfr-lab)
+                │  DHCP: 10.13.37.10–100
+Player ──→ http://10.13.37.1/   ← served by fr-wifi-module container (thttpd + CGI)
+                │
+    [reads VPN endpoint + PSK from vpn.html]
+                │
+Player ──→ IKEv2 VPN ──→  fr-wifi-module container (10.13.37.1)
+                               │  (NAT MASQUERADE)
+                        Lab network 192.168.X.0/24
+                               │
+Player ──→ http://console.nfr.lab/   (DNS resolves via VPN tunnel)
+```
+
+WiFi clients **cannot** reach the lab network or the console before connecting VPN.
+This is intentional — no default gateway is pushed via DHCP.
 
 ---
 

@@ -15,7 +15,7 @@ RUN apk update && apk add --no-cache \
     bash iproute2 iptables hostapd dnsmasq strongswan thttpd
 
 # Create working directories
-RUN mkdir -p /opt/wifi-module/web /etc/hostapd /var/log/wifi-module
+RUN mkdir -p /opt/wifi-module/web/cgi-bin /etc/hostapd /var/log/wifi-module
 
 # Bake in the entrypoint (infrastructure config, not session-specific)
 COPY wifi-module-entrypoint.sh /opt/wifi-module/entrypoint.sh
