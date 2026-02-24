@@ -954,6 +954,7 @@ Usage: $0 [options]
 
 ━━━ Utility ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  --no-browser   Do not open a browser tab when the lab is ready
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
@@ -1025,6 +1026,7 @@ declare -A services_meta=(
 dry_run=false
 skip_plain=false
 skip_tls=false
+no_browser=false
 list_services_only=false
 single_service=""
 REPLAY_SESSION_ID=""
@@ -1051,6 +1053,8 @@ while [[ $_i -le $# ]]; do
       AP_IFACE="$_next_arg"
       (( _i++ )) || :   # skip the interface arg too
     fi
+  elif [[ "${!_i}" == "--no-browser" ]]; then
+    no_browser=true
   else
     _new_args+=("${!_i}")
   fi
@@ -1738,3 +1742,12 @@ fi
 # ─── Report duration ───────────────────────────────────────────────────────
 duration=$SECONDS
 log console " ⏱️  Lab launched in $duration seconds"
+
+# ─── Open browser (unless suppressed or dry run) ────────────────────────────
+if [[ "$no_browser" == false && "$dry_run" == false ]]; then
+  if command -v xdg-open &>/dev/null; then
+    xdg-open "http://console.nfr.lab/" &>/dev/null &
+  elif command -v open &>/dev/null; then
+    open "http://console.nfr.lab/" &>/dev/null &
+  fi
+fi

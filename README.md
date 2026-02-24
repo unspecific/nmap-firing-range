@@ -219,6 +219,7 @@ Usage: launch_lab [options]
 
 ━━━ Utility ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+  --no-browser   Do not open a browser tab when the lab is ready
   -l             List available services and exit
   -V             Show version and exit
   -h             Show this help message and exit
