@@ -1665,13 +1665,8 @@ else
 fi
 
 # ─── Launch containers ─────────────────────────────────────────────────────
-if ! $COMPOSE_CMD -f "$compose_file" create >/dev/null 2>&1; then
-  log console "❌  Failed to create the containers"
-  exit 1
-fi
-
-if ! $COMPOSE_CMD -f "$compose_file" start >/dev/null 2>&1; then
-  log console "❌  Failed to start the containers"
+if ! $COMPOSE_CMD -f "$compose_file" up -d; then
+  log console "❌  Failed to launch the containers"
   exit 1
 fi
 
